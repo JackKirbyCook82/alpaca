@@ -6,19 +6,20 @@ Created on Mon Jan 13 2025
 
 """
 
-import logging
 import pandas as pd
+from collections import namedtuple as ntuple
+
+from finance.variables import Querys
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
-from support.mixins import Emptying, Sizing, Partition
+from support.mixins import Emptying, Sizing, Partition, Mixin
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
 __all__ = []
 __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
-__logger__ = logging.getLogger(__name__)
 
 
 class AlpacaURL(WebURL, domain="https://data.alpaca.markets"): pass
@@ -59,27 +60,27 @@ class AlpacaContractURL(AlpacaURL, path=["v1beta1", "options", "snapshots"], par
     def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if bool(pagination) else {}
 
 
-class AlpacaData(WebJSON.Mapping, multiple=False, optional=False, parsers=PARSERS): pass
-class AlpacaStockTradeData(AlpacaData, locator="//trades"): pass
-class AlpacaStockQuoteData(AlpacaData, locator="//quotes"): pass
-class AlpacaOptionTradeData(AlpacaData, locator="//trades"): pass
-class AlpacaOptionQuoteData(AlpacaData, locator="//quotes"): pass
+class AlpacaData(WebJSON.Mapping, multiple=False, optional=False): pass
+class AlpacaStockTradeData(AlpacaData, locator="//trades", parsers=PARSERS.TRADE): pass
+class AlpacaStockQuoteData(AlpacaData, locator="//quotes", parsers=PARSERS.QUOTE): pass
+class AlpacaOptionTradeData(AlpacaData, locator="//trades", parsers=PARSERS.TRADE): pass
+class AlpacaOptionQuoteData(AlpacaData, locator="//quotes", parsers=PARSERS.QUOTE): pass
 
 class AlpacaContractData(WebJSON, multiple=False, optional=False):
-    class Pagination(WebJSON.Text, locator="next_page_token", key="pagination", parser=PARSER): pass
+    class Pagination(WebJSON.Text, locator="next_page_token", key="pagination", parser=PARSERS.PAGINATION): pass
     class Contracts(WebJSON.Mapping, locator="snapshots", key="contracts"):
         def execute(self, *args, **kwargs):
             contents = super().execute(*args, **kwargs)
             assert isinstance(contents, dict)
             contracts = list(contents.keys())
-            contracts = list(map(Contract, contracts))
+            contracts = list(map(Querys.Contract, contracts))
             return contracts
 
 
-class AlpacaStockTradePage(WebJSONPage, url=AlpacaStockTradeData, data={(STOCK, TRADE), AlpacaStockTradeData}): pass
-class AlpacaStockQuotePage(WebJSONPage, url=AlpacaStockQuoteData, data={(STOCK, QUOTE), AlpacaStockQuoteData}): pass
-class AlpacaOptionTradePage(WebJSONPage, url=AlpacaOptionTradeData, data={(OPTION, TRADE): AlpacaOptionTradeData}): pass
-class AlpacaOptionQuotePage(WebJSONPage, url=AlpacaOptionQuoteData, data={(OPTION, QUOTE): AlpacaOptionQuoteData}): pass
+class AlpacaStockTradePage(WebJSONPage, url=AlpacaStockTradeData, data=AlpacaStockTradeData): pass
+class AlpacaStockQuotePage(WebJSONPage, url=AlpacaStockQuoteData, data=AlpacaStockQuoteData): pass
+class AlpacaOptionTradePage(WebJSONPage, url=AlpacaOptionTradeData, data=AlpacaOptionTradeData): pass
+class AlpacaOptionQuotePage(WebJSONPage, url=AlpacaOptionQuoteData, data=AlpacaOptionQuoteData): pass
 
 class AlpacaContractPage(WebJSONPage, url=AlpacaContractURL, data=AlpacaContractData):
     def execute(self, *args, **kwargs):
@@ -91,71 +92,101 @@ class AlpacaContractPage(WebJSONPage, url=AlpacaContractURL, data=AlpacaContract
         else: return list(contracts) + self.execute(*args, pagination=pagination, **kwargs)
 
 
-class AlpacaContractDownloader(object):
+class AlpacaContractDownloader(Mixin, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.page = AlpacaContractPage(*args, **kwargs)
 
-    def execute(self, *args, symbols, expires, **kwargs):
-        assert isinstance(symbols, list)
-        if not bool(symbols): return
+    def execute(self, symbols, *args, **kwargs):
+        assert isinstance(symbols, (list, Querys.Symbol))
+        assert all([isinstance(symbol, Querys.Symbol) for symbol in symbols]) if isinstance(symbols, list) else True
+        symbols = list(symbols) if isinstance(symbols, list) else [symbols]
         for symbol in iter(symbols):
-            parameters = dict(ticker=symbol.ticker, expires=expires)
-            contracts = self.page(*args, **parameters, **kwargs)
-            assert isinstance(contracts, list)
-            string = f"Downloaded: {repr(self)}|{str(CONTRACT)}|{str(symbol)}[{len(contracts):.0f}]"
-            __logger__.info(string)
+            contracts = self.download(symbol, *args, **kwargs)
+            string = f"{str(symbol)}[{len(contracts):.0f}]"
+            self.console(string)
             if not bool(contracts): continue
-            yield {(CONTRACT,): contracts}
+            yield contracts
+
+    def download(self, symbol, *args, expires, **kwargs):
+        parameters = dict(ticker=symbol.ticker, expires=expires)
+        contracts = self.page(*args, **parameters, **kwargs)
+        assert isinstance(contracts, list)
+        return contracts
+
+    @property
+    def page(self): return self.__page
 
 
-class AlpacaStockDownloader(Sizing, Emptying, Partition):
+class AlpacaStockDownloader(Sizing, Emptying, Partition, query=Querys.Symbol, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        pages = ntuple("Pages", "trade quote")
         trade = AlpacaStockTradePage(*args, **kwargs)
         quote = AlpacaStockQuotePage(*args, **kwargs)
-        self.pages = dict(trade=trade, quote=quote)
+        self.pages = pages(trade, quote)
 
-    def execute(self, *args, symbols, **kwargs):
-        assert isinstance(symbols, list)
+    def execute(self, symbols, *args, **kwargs):
+        assert isinstance(symbols, (list, Querys.Symbol))
+        assert all([isinstance(symbol, Querys.Symbol) for symbol in symbols]) if isinstance(symbols, list) else True
+        symbols = list(symbols) if isinstance(symbols, list) else [symbols]
         if not bool(symbols): return
-        parameters = dict(tickers=[str(symbol.ticker).upper() for symbol in symbols])
-        stocks = {dataset: page(*args, **parameters, **kwargs) for dataset, page in self.pages.items()}
-        stocks = pd.concat(list(stocks.values()), axis=1)
-        for partition, dataframe in self.partition(stocks, by=Symbol):
-            contents = {(STOCK, dataset): dataframe[columns] for dataset, columns in {TRADE: TRADE_COLUMNS, QUOTE: QUOTE_COLUMNS}.items()}
-            for dataset, content in contents.items():
-                string = "|".join(list(map(str, dataset)))
-                size = self.size(content)
-                string = f"Downloaded: {repr(self)}|{str(string)}|{str(partition)}[{int(size):.0f}]"
-                __logger__.info(string)
-            if self.empty(contents): continue
-            yield contents
+        stocks = self.download(symbols, *args, **kwargs)
+        for symbol, dataframe in self.partition(stocks):
+            size = self.size(dataframe)
+            string = f"{str(symbol)}[{int(size):.0f}]"
+            self.console(string)
+            if self.empty(dataframe): return
+            return dataframe
+
+    def download(self, symbols, *args, **kwargs):
+        parameters = dict(tickers=[symbol.ticker for symbol in symbols])
+        trade = self.pages.trade(*args, **parameters, **kwargs)
+        quote = self.pages.quote(*args, **parameters, **kwargs)
+        assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
+        stocks = trade.merge(quote, how="outer", on=list(Querys.Symbol), sort=False, suffixes=("", "_"))
+        return stocks
+
+    @property
+    def columns(self): return self.__columns
+    @property
+    def pages(self): return self.__pages
 
 
-class AlpacaOptionDownloader(Sizing, Emptying, Partition):
+class AlpacaOptionDownloader(Sizing, Emptying, Partition, query=Querys.Settlement, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        pages = ntuple("Pages", "trade quote")
         trade = AlpacaOptionTradePage(*args, **kwargs)
         quote = AlpacaOptionQuotePage(*args, **kwargs)
-        self.pages = dict(trade=trade, quote=quote)
+        self.pages = pages(trade, quote)
 
-    def execute(self, *args, contracts, **kwargs):
-        assert isinstance(contracts, list)
+    def execute(self, contracts, *args, **kwargs):
+        assert isinstance(contracts, (list, Querys.Contract))
+        assert all([isinstance(contract, Querys.Contract) for contract in contracts]) if isinstance(contracts, list) else True
+        contracts = list(contracts) if isinstance(contracts, list) else [contracts]
         if not bool(contracts): return
-        parameters = dict(contract=[str(contract.toOSI()) for contract in contracts])
-        options = {dataset: page(*args, **parameters, **kwargs) for dataset, page in self.pages.items()}
-        options = pd.concat(list(options.values()), axis=1)
-        for partition, dataframe in self.partition(options, by=Settlement):
-            contents = {(OPTION, dataset): dataframe[columns] for dataset, columns in {TRADE: COLUMNS, QUOTE: COLUMNS}.items()}
-            for dataset, content in contents.items():
-                string = "|".join(list(map(str, dataset)))
-                size = self.size(dataframe)
-                string = f"Downloaded: {repr(self)}|{str(string)}|{str(partition)}[{int(size):.0f}]"
-                __logger__.info(string)
-            if self.empty(contents): return
-            return contents
+        options = self.download(contracts, *args, **kwargs)
+        for settlement, dataframe in self.partition(options):
+            size = self.size(dataframe)
+            string = f"{str(settlement)}[{int(size):.0f}]"
+            self.console(string)
+            if self.empty(dataframe): return
+            return dataframe
 
+    def download(self, contracts, *args, underlying={}, **kwargs):
+        parameters = dict(contracts=[contract.toOSI() for contract in contracts])
+        trade = self.pages.trade(*args, **parameters, **kwargs)
+        quote = self.pages.quote(*args, **parameters, **kwargs)
+        assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
+        options = trade.merge(quote, how="outer", on=list(Querys.Contract), sort=False, suffixes=("", "_"))
+        options["underlying"] = options["ticker"].apply(lambda ticker: underlying["ticker"])
+        return options
+
+    @property
+    def columns(self): return self.__columns
+    @property
+    def pages(self): return self.__pages
 
 
 
