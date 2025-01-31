@@ -6,7 +6,10 @@ Created on Mon Jan 13 2025
 
 """
 
+import pytz
+import numpy as np
 import pandas as pd
+from datetime import datetime as Datetime
 from collections import namedtuple as ntuple
 
 from finance.variables import Querys
@@ -20,6 +23,17 @@ __author__ = "Jack Kirby Cook"
 __all__ = []
 __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
+
+
+timestamp_parser = lambda string: Datetime.fromisoformat(string).astimezone(pytz.timezone("US/Central"))
+current_parser = lambda string: np.datetime64(timestamp_parser(string))
+contract_parser = lambda string: Querys.Contract.fromOSI(string)
+contracts_parser = lambda mapping: list(map(contract_parser, mapping))
+price_parsers = {code: lambda value: (key, np.float32(value)) for key, code in {"price": "p", "ask": "ap", "bid": "bp"}}
+size_parsers = {code: lambda value: (key, np.int32(value)) for key, code in {"supply": "as", "demand": "bs"}}
+date_parsers = {"t": lambda value: ("current", current_parser(value))}
+trade_parser = lambda mapping: dict([(price_parsers | size_parsers | date_parsers)[code](value) for code, value in mapping.items()])
+quote_parser = lambda mapping: dict([(price_parsers | size_parsers | date_parsers)[code](value) for code, value in mapping.items()])
 
 
 class AlpacaURL(WebURL, domain="https://data.alpaca.markets"): pass
@@ -61,14 +75,14 @@ class AlpacaContractURL(AlpacaURL, path=["v1beta1", "options", "snapshots"], par
 
 
 class AlpacaData(WebJSON.Mapping, multiple=False, optional=False): pass
-class AlpacaStockTradeData(AlpacaData, locator="//trades", parsers=PARSERS.TRADE): pass
-class AlpacaStockQuoteData(AlpacaData, locator="//quotes", parsers=PARSERS.QUOTE): pass
-class AlpacaOptionTradeData(AlpacaData, locator="//trades", parsers=PARSERS.TRADE): pass
-class AlpacaOptionQuoteData(AlpacaData, locator="//quotes", parsers=PARSERS.QUOTE): pass
+class AlpacaStockTradeData(AlpacaData, locator="//trades", parser=trade_parser): pass
+class AlpacaStockQuoteData(AlpacaData, locator="//quotes", parser=quote_parser): pass
+class AlpacaOptionTradeData(AlpacaData, locator="//trades", parser=trade_parser): pass
+class AlpacaOptionQuoteData(AlpacaData, locator="//quotes", parser=quote_parser): pass
 
 class AlpacaContractData(WebJSON, multiple=False, optional=False):
-    class Pagination(WebJSON.Text, locator="next_page_token", key="pagination", parser=PARSERS.PAGINATION): pass
-    class Contracts(WebJSON.Mapping, locator="snapshots", key="contracts"):
+    class Pagination(WebJSON.Text, locator="next_page_token", key="pagination", parser=str): pass
+    class Contracts(WebJSON.Mapping, locator="snapshots", key="contracts", parser=contract_parser):
         def execute(self, *args, **kwargs):
             contents = super().execute(*args, **kwargs)
             assert isinstance(contents, dict)
