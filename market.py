@@ -16,7 +16,7 @@ from finance.variables import Querys
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
-from support.mixins import Emptying, Sizing, Partition, Mixin
+from support.mixins import Emptying, Sizing, Partition, Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -106,7 +106,7 @@ class AlpacaContractPage(WebJSONPage, url=AlpacaContractURL, data=AlpacaContract
         else: return list(contracts) + self.execute(*args, pagination=pagination, **kwargs)
 
 
-class AlpacaContractDownloader(Mixin, title="Downloaded"):
+class AlpacaContractDownloader(Logging, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.page = AlpacaContractPage(*args, **kwargs)
@@ -132,7 +132,7 @@ class AlpacaContractDownloader(Mixin, title="Downloaded"):
     def page(self): return self.__page
 
 
-class AlpacaStockDownloader(Sizing, Emptying, Partition, query=Querys.Symbol, title="Downloaded"):
+class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, query=Querys.Symbol, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         pages = ntuple("Pages", "trade quote")
@@ -148,8 +148,7 @@ class AlpacaStockDownloader(Sizing, Emptying, Partition, query=Querys.Symbol, ti
         stocks = self.download(symbols, *args, **kwargs)
         for symbol, dataframe in self.partition(stocks):
             size = self.size(dataframe)
-            string = f"{str(symbol)}[{int(size):.0f}]"
-            self.console(string)
+            self.console(f"{str(symbol)}[{int(size):.0f}]")
             if self.empty(dataframe): return
             return dataframe
 
@@ -167,7 +166,7 @@ class AlpacaStockDownloader(Sizing, Emptying, Partition, query=Querys.Symbol, ti
     def pages(self): return self.__pages
 
 
-class AlpacaOptionDownloader(Sizing, Emptying, Partition, query=Querys.Settlement, title="Downloaded"):
+class AlpacaOptionDownloader(Sizing, Emptying, Partition, Logging, query=Querys.Settlement, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         pages = ntuple("Pages", "trade quote")
@@ -183,8 +182,7 @@ class AlpacaOptionDownloader(Sizing, Emptying, Partition, query=Querys.Settlemen
         options = self.download(contracts, *args, **kwargs)
         for settlement, dataframe in self.partition(options):
             size = self.size(dataframe)
-            string = f"{str(settlement)}[{int(size):.0f}]"
-            self.console(string)
+            self.console(f"{str(settlement)}[{int(size):.0f}]")
             if self.empty(dataframe): return
             return dataframe
 
