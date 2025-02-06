@@ -132,7 +132,7 @@ class AlpacaContractDownloader(Logging, title="Downloaded"):
     def page(self): return self.__page
 
 
-class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, query=Querys.Symbol, title="Downloaded"):
+class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         pages = ntuple("Pages", "trade quote")
@@ -146,7 +146,7 @@ class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, query=Querys.S
         symbols = list(symbols) if isinstance(symbols, list) else [symbols]
         if not bool(symbols): return
         stocks = self.download(symbols, *args, **kwargs)
-        for symbol, dataframe in self.partition(stocks):
+        for symbol, dataframe in self.partition(stocks, by=Querys.Symbol):
             size = self.size(dataframe)
             self.console(f"{str(symbol)}[{int(size):.0f}]")
             if self.empty(dataframe): return
@@ -166,7 +166,7 @@ class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, query=Querys.S
     def pages(self): return self.__pages
 
 
-class AlpacaOptionDownloader(Sizing, Emptying, Partition, Logging, query=Querys.Settlement, title="Downloaded"):
+class AlpacaOptionDownloader(Sizing, Emptying, Partition, Logging, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         pages = ntuple("Pages", "trade quote")
@@ -180,7 +180,7 @@ class AlpacaOptionDownloader(Sizing, Emptying, Partition, Logging, query=Querys.
         contracts = list(contracts) if isinstance(contracts, list) else [contracts]
         if not bool(contracts): return
         options = self.download(contracts, *args, **kwargs)
-        for settlement, dataframe in self.partition(options):
+        for settlement, dataframe in self.partition(options, by=Querys.Settlement):
             size = self.size(dataframe)
             self.console(f"{str(settlement)}[{int(size):.0f}]")
             if self.empty(dataframe): return
