@@ -29,23 +29,30 @@ timestamp_parser = lambda string: Datetime.fromisoformat(string).astimezone(pytz
 current_parser = lambda string: np.datetime64(timestamp_parser(string))
 contract_parser = lambda string: Querys.Contract.fromOSI(string)
 contracts_parser = lambda mapping: list(map(contract_parser, mapping))
+ticker_parser = lambda ticker: {"ticker": str(ticker).upper()}
 price_parsers = {code: lambda value: (key, np.float32(value)) for key, code in {"price": "p", "ask": "ap", "bid": "bp"}}
 size_parsers = {code: lambda value: (key, np.int32(value)) for key, code in {"supply": "as", "demand": "bs"}}
 date_parsers = {"t": lambda value: ("current", current_parser(value))}
-trade_parser = lambda mapping: dict([(price_parsers | size_parsers | date_parsers)[code](value) for code, value in mapping.items()])
-quote_parser = lambda mapping: dict([(price_parsers | size_parsers | date_parsers)[code](value) for code, value in mapping.items()])
+content_parsers = price_parsers | size_parsers | date_parsers
+contents_parser = lambda contents: dict([content_parsers[code](value) for code, value in contents.items()])
+security_parser = lambda mapping: pd.DataFrame.from_records([ticker_parser(ticker) | contents_parser(contents) for ticker, contents in mapping.items()])
 
 
-class AlpacaURL(WebURL, domain="https://data.alpaca.markets"): pass
-class AlpacaStockURL(AlpacaURL, path=["v2", "stocks"], parms={"currency": "USD", "feed": "delayed_sip"}):
+class AlpacaURL(WebURL, domain="https://data.alpaca.markets", headers={"accept": "application/json"}):
     @staticmethod
-    def parms(*args, tickers, **kwargs):
+    def headers(*args, api, **kwargs):
+        assert isinstance(api, tuple)
+        return {"APCA-API-KEY-ID": str(api.identity), "APCA-API-SECRET-KEY": str(api.code)}
+
+class AlpacaStockURL(AlpacaURL, path=["v2", "stocks"], parameters={"feed": "delayed_sip"}, headers={"accept": "application/json"}):
+    @staticmethod
+    def parameters(*args, tickers, **kwargs):
         assert isinstance(tickers, list)
         return {"symbol": ",".join(list(tickers)) + ".json"}
 
-class AlpacaOptionURL(AlpacaURL, path=["v1beta1", "options"], parms={"feed": "indicative"}):
+class AlpacaOptionURL(AlpacaURL, path=["v1beta1", "options"], parameters={"feed": "indicative"}, headers={"accept": "application/json"}):
     @staticmethod
-    def parms(*args, contracts, **kwargs):
+    def parameters(*args, contracts, **kwargs):
         assert isinstance(contracts, list)
         return {"symbol": ",".join(list(contracts)) + ".json"}
 
@@ -55,11 +62,11 @@ class AlpacaStockQuoteURL(AlpacaStockURL, path=["quotes", "latest"]): pass
 class AlpacaOptionTradeURL(AlpacaOptionURL, path=["trades", "latest"]): pass
 class AlpacaOptionQuoteURL(AlpacaOptionURL, path=["quotes", "latest"]): pass
 
-class AlpacaContractURL(AlpacaURL, path=["v1beta1", "options", "snapshots"], parms={"feed": "indicative", "limit": 1000}):
+class AlpacaContractURL(AlpacaURL, path=["v1beta1", "options", "snapshots"], parameters={"feed": "indicative", "limit": 1000}):
     @staticmethod
     def path(*args, ticker, **kwargs): return [str(ticker).upper()]
     @classmethod
-    def parms(cls, *args, **kwargs):
+    def parameters(cls, *args, **kwargs):
         expires = cls.expires(*args, **kwargs)
         strikes = cls.strikes(*args, **kwargs)
         pagination = cls.pagination(*args, **kwargs)
@@ -74,11 +81,17 @@ class AlpacaContractURL(AlpacaURL, path=["v1beta1", "options", "snapshots"], par
     def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if bool(pagination) else {}
 
 
-class AlpacaData(WebJSON.Mapping, multiple=False, optional=False): pass
-class AlpacaStockTradeData(AlpacaData, locator="//trades", parser=trade_parser): pass
-class AlpacaStockQuoteData(AlpacaData, locator="//quotes", parser=quote_parser): pass
-class AlpacaOptionTradeData(AlpacaData, locator="//trades", parser=trade_parser): pass
-class AlpacaOptionQuoteData(AlpacaData, locator="//quotes", parser=quote_parser): pass
+class AlpacaData(WebJSON.Mapping, multiple=False, optional=False):
+    def execute(self, *args, **kwargs):
+        contents = super().execute(*args, **kwargs)
+        assert isinstance(contents, list)
+        contents = pd.DataFrame.from_records(contents)
+        return contents
+
+class AlpacaStockTradeData(AlpacaData, locator="//trades", parser=security_parser): pass
+class AlpacaStockQuoteData(AlpacaData, locator="//quotes", parser=security_parser): pass
+class AlpacaOptionTradeData(AlpacaData, locator="//trades", parser=security_parser): pass
+class AlpacaOptionQuoteData(AlpacaData, locator="//quotes", parser=security_parser): pass
 
 class AlpacaContractData(WebJSON, multiple=False, optional=False):
     class Pagination(WebJSON.Text, locator="next_page_token", key="pagination", parser=str): pass
@@ -91,17 +104,35 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
             return contracts
 
 
-class AlpacaStockTradePage(WebJSONPage, url=AlpacaStockTradeData, data=AlpacaStockTradeData): pass
-class AlpacaStockQuotePage(WebJSONPage, url=AlpacaStockQuoteData, data=AlpacaStockQuoteData): pass
-class AlpacaOptionTradePage(WebJSONPage, url=AlpacaOptionTradeData, data=AlpacaOptionTradeData): pass
-class AlpacaOptionQuotePage(WebJSONPage, url=AlpacaOptionQuoteData, data=AlpacaOptionQuoteData): pass
+class AlpacaStockTradePage(WebJSONPage, url=AlpacaStockTradeData):
+    def execute(self, *args, **kwargs):
+        trade = AlpacaStockTradeData(self.json, *args, **kwargs)
+        trade = trade(*args, **kwargs)
+        return trade
+
+class AlpacaStockQuotePage(WebJSONPage, url=AlpacaStockQuoteData):
+    def execute(self, *args, **kwargs):
+        quote = AlpacaStockQuoteData(self.json, *args, **kwargs)
+        quote = quote(*args, **kwargs)
+        return quote
+
+class AlpacaOptionTradePage(WebJSONPage, url=AlpacaOptionTradeData):
+    def execute(self, *args, **kwargs):
+        trade = AlpacaOptionTradeData(self.json, *args, **kwargs)
+        trade = trade(*args, **kwargs)
+        return trade
+
+class AlpacaOptionQuotePage(WebJSONPage, url=AlpacaOptionQuoteData):
+    def execute(self, *args, **kwargs):
+        quote = AlpacaOptionQuoteData(self.json, *args, **kwargs)
+        quote = quote(*args, **kwargs)
+        return quote
 
 class AlpacaContractPage(WebJSONPage, url=AlpacaContractURL, data=AlpacaContractData):
     def execute(self, *args, **kwargs):
-        url = self.url(*args, **kwargs)
-        self.load(url)
-        contracts = self.data["contract"](self.content, *args, **kwargs)
-        pagination = self.data["pagination"](self.content, *args, **kwargs)
+        data = AlpacaContractData(self.json, *args, **kwargs)
+        contracts = data["contract"](*args, **kwargs)
+        pagination = data["pagination"](*args, **kwargs)
         if not bool(pagination): return list(contracts)
         else: return list(contracts) + self.execute(*args, pagination=pagination, **kwargs)
 
@@ -157,7 +188,8 @@ class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, title="Downloa
         trade = self.pages.trade(*args, **parameters, **kwargs)
         quote = self.pages.quote(*args, **parameters, **kwargs)
         assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
-        stocks = trade.merge(quote, how="outer", on=list(Querys.Symbol), sort=False, suffixes=("", "_"))
+        header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
+        stocks = trade.merge(quote, how="outer", on=list(Querys.Symbol), sort=False, suffixes=("", "_"))[header]
         return stocks
 
     @property
@@ -191,7 +223,8 @@ class AlpacaOptionDownloader(Sizing, Emptying, Partition, Logging, title="Downlo
         trade = self.pages.trade(*args, **parameters, **kwargs)
         quote = self.pages.quote(*args, **parameters, **kwargs)
         assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
-        options = trade.merge(quote, how="outer", on=list(Querys.Contract), sort=False, suffixes=("", "_"))
+        header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
+        options = trade.merge(quote, how="outer", on=list(Querys.Contract), sort=False, suffixes=("", "_"))[header]
         options["underlying"] = options["ticker"].apply(lambda ticker: underlying["ticker"])
         return options
 
