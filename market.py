@@ -30,8 +30,8 @@ current_parser = lambda string: np.datetime64(timestamp_parser(string))
 contract_parser = lambda string: Querys.Contract.fromOSI(string)
 contracts_parser = lambda mapping: list(map(contract_parser, mapping))
 ticker_parser = lambda ticker: {"ticker": str(ticker).upper()}
-price_parsers = {code: lambda value: (key, np.float32(value)) for key, code in {"price": "p", "ask": "ap", "bid": "bp"}}
-size_parsers = {code: lambda value: (key, np.int32(value)) for key, code in {"supply": "as", "demand": "bs"}}
+price_parsers = {code: lambda value: (key, np.float32(value)) for key, code in {"price": "p", "ask": "ap", "bid": "bp"}.items()}
+size_parsers = {code: lambda value: (key, np.int32(value)) for key, code in {"supply": "as", "demand": "bs"}.items()}
 date_parsers = {"t": lambda value: ("current", current_parser(value))}
 content_parsers = price_parsers | size_parsers | date_parsers
 contents_parser = lambda contents: dict([content_parsers[code](value) for code, value in contents.items()])
@@ -48,13 +48,13 @@ class AlpacaStockURL(AlpacaURL, path=["v2", "stocks"], parameters={"feed": "dela
     @staticmethod
     def parameters(*args, tickers, **kwargs):
         assert isinstance(tickers, list)
-        return {"symbol": ",".join(list(tickers)) + ".json"}
+        return {"symbols": ",".join(list(tickers))}
 
 class AlpacaOptionURL(AlpacaURL, path=["v1beta1", "options"], parameters={"feed": "indicative"}, headers={"accept": "application/json"}):
     @staticmethod
     def parameters(*args, contracts, **kwargs):
         assert isinstance(contracts, list)
-        return {"symbol": ",".join(list(contracts)) + ".json"}
+        return {"symbols": ",".join(list(contracts))}
 
 
 class AlpacaStockTradeURL(AlpacaStockURL, path=["trades", "latest"]): pass
@@ -104,31 +104,31 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
             return contracts
 
 
-class AlpacaStockTradePage(WebJSONPage, url=AlpacaStockTradeData):
+class AlpacaStockTradePage(WebJSONPage, url=AlpacaStockTradeURL):
     def execute(self, *args, **kwargs):
         trade = AlpacaStockTradeData(self.json, *args, **kwargs)
         trade = trade(*args, **kwargs)
         return trade
 
-class AlpacaStockQuotePage(WebJSONPage, url=AlpacaStockQuoteData):
+class AlpacaStockQuotePage(WebJSONPage, url=AlpacaStockQuoteURL):
     def execute(self, *args, **kwargs):
         quote = AlpacaStockQuoteData(self.json, *args, **kwargs)
         quote = quote(*args, **kwargs)
         return quote
 
-class AlpacaOptionTradePage(WebJSONPage, url=AlpacaOptionTradeData):
+class AlpacaOptionTradePage(WebJSONPage, url=AlpacaOptionTradeURL):
     def execute(self, *args, **kwargs):
         trade = AlpacaOptionTradeData(self.json, *args, **kwargs)
         trade = trade(*args, **kwargs)
         return trade
 
-class AlpacaOptionQuotePage(WebJSONPage, url=AlpacaOptionQuoteData):
+class AlpacaOptionQuotePage(WebJSONPage, url=AlpacaOptionQuoteURL):
     def execute(self, *args, **kwargs):
         quote = AlpacaOptionQuoteData(self.json, *args, **kwargs)
         quote = quote(*args, **kwargs)
         return quote
 
-class AlpacaContractPage(WebJSONPage, url=AlpacaContractURL, data=AlpacaContractData):
+class AlpacaContractPage(WebJSONPage, url=AlpacaContractURL):
     def execute(self, *args, **kwargs):
         data = AlpacaContractData(self.json, *args, **kwargs)
         contracts = data["contract"](*args, **kwargs)
@@ -140,7 +140,7 @@ class AlpacaContractPage(WebJSONPage, url=AlpacaContractURL, data=AlpacaContract
 class AlpacaContractDownloader(Logging, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.page = AlpacaContractPage(*args, **kwargs)
+        self.__page = AlpacaContractPage(*args, **kwargs)
 
     def execute(self, symbols, *args, **kwargs):
         assert isinstance(symbols, (list, Querys.Symbol))
@@ -169,7 +169,7 @@ class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, title="Downloa
         pages = ntuple("Pages", "trade quote")
         trade = AlpacaStockTradePage(*args, **kwargs)
         quote = AlpacaStockQuotePage(*args, **kwargs)
-        self.pages = pages(trade, quote)
+        self.__pages = pages(trade, quote)
 
     def execute(self, symbols, *args, **kwargs):
         assert isinstance(symbols, (list, Querys.Symbol))
@@ -204,7 +204,7 @@ class AlpacaOptionDownloader(Sizing, Emptying, Partition, Logging, title="Downlo
         pages = ntuple("Pages", "trade quote")
         trade = AlpacaOptionTradePage(*args, **kwargs)
         quote = AlpacaOptionQuotePage(*args, **kwargs)
-        self.pages = pages(trade, quote)
+        self.__pages = pages(trade, quote)
 
     def execute(self, contracts, *args, **kwargs):
         assert isinstance(contracts, (list, Querys.Contract))
