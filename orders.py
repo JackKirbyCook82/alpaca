@@ -6,9 +6,11 @@ Created on Tues Feb 18 2025
 
 """
 
+from support.mixins import Logging
+
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["AlpacaOrderUploader", "AlpacaOrderCalculator"]
+__all__ = ["AlpacaOrderUploader"]
 __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -37,12 +39,10 @@ class AlpacaOrderPage():
     pass
 
 
-class AlpacaOrderUploader():
-    pass
+class AlpacaOrderUploader(Logging):
+    def execute(self, orders, *args, **kwargs):
+        pass
 
-
-class AlpacaOrderCalculator():
-    pass
 
 
 
