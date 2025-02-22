@@ -35,7 +35,7 @@ content_parsers = price_parsers | size_parsers | date_parsers
 contents_parser = lambda contents: {key: function(contents[code]) for code, (key, function) in content_parsers.items() if code in contents.keys()}
 quote_parser = lambda mapping: [ticker_parser(ticker) | contents_parser(contents) for ticker, contents in mapping.items()]
 trade_parser = lambda mapping: [ticker_parser(ticker) | contents_parser(contents) for ticker, contents in mapping.items()]
-contracts_parser = lambda mapping: [Querys.Contract(list(osi)) for osi in list(map(OSI, mapping))]
+osi_parser = lambda mapping: [OSI[string] for string in mapping.keys()]
 
 
 class AlpacaURL(WebURL, domain="https://data.alpaca.markets", headers={"accept": "application/json"}):
@@ -52,9 +52,9 @@ class AlpacaStockURL(AlpacaURL, path=["v2", "stocks"], parameters={"feed": "dela
 
 class AlpacaOptionURL(AlpacaURL, path=["v1beta1", "options"], parameters={"feed": "indicative"}, headers={"accept": "application/json"}):
     @staticmethod
-    def parameters(*args, contracts, **kwargs):
-        assert isinstance(contracts, list)
-        return {"symbols": ",".join(list(contracts))}
+    def parameters(*args, osis, **kwargs):
+        assert isinstance(osis, list)
+        return {"symbols": ",".join(list(map(str, osis)))}
 
 
 class AlpacaStockTradeURL(AlpacaStockURL, path=["trades", "latest"]): pass
@@ -62,7 +62,7 @@ class AlpacaStockQuoteURL(AlpacaStockURL, path=["quotes", "latest"]): pass
 class AlpacaOptionTradeURL(AlpacaOptionURL, path=["trades", "latest"]): pass
 class AlpacaOptionQuoteURL(AlpacaOptionURL, path=["quotes", "latest"]): pass
 
-class AlpacaContractURL(AlpacaURL, path=["v1beta1", "options", "snapshots"], parameters={"feed": "indicative", "limit": 1000}):
+class AlpacaOSIURL(AlpacaURL, path=["v1beta1", "options", "snapshots"], parameters={"feed": "indicative", "limit": 1000}):
     @staticmethod
     def path(*args, ticker, **kwargs): return [str(ticker).upper()]
     @classmethod
@@ -92,9 +92,9 @@ class AlpacaStockQuoteData(AlpacaData, locator="//quotes", parser=quote_parser):
 class AlpacaOptionTradeData(AlpacaData, locator="//trades", parser=trade_parser): pass
 class AlpacaOptionQuoteData(AlpacaData, locator="//quotes", parser=quote_parser): pass
 
-class AlpacaContractData(WebJSON, multiple=False, optional=False):
+class AlpacaOSIData(WebJSON, multiple=False, optional=False):
     class Pagination(WebJSON.Text, locator="next_page_token", key="pagination", parser=str, optional=True): pass
-    class Contracts(WebJSON.Mapping, locator="snapshots", key="contracts", parser=contracts_parser):
+    class OSI(WebJSON.Mapping, locator="snapshots", key="osi", parser=osi_parser):
         def execute(self, *args, **kwargs):
             contracts = super().execute(*args, **kwargs)
             assert isinstance(contracts, list)
@@ -125,16 +125,13 @@ class AlpacaOptionQuotePage(WebJSONPage, url=AlpacaOptionQuoteURL):
         quote = quote(*args, **kwargs)
         return quote
 
-class AlpacaContractPage(WebJSONPage, url=AlpacaContractURL):
-    def execute(self, *args, **kwargs):
-        pass
-
-#    def execute(self, *args, pagination=None, **kwargs):
-#        data = AlpacaContractData(self.json, *args, **kwargs)
-#        contracts = data["contracts"](*args, **kwargs)
-#        pagination = data["pagination"](*args, **kwargs) if bool(data["pagination"]) else pagination
-#        if not bool(pagination): return list(contracts)
-#        else: return list(contracts) + self.execute(*args, pagination=pagination, **kwargs)
+class AlpacaOSIPage(WebJSONPage, url=AlpacaOSIURL):
+    def execute(self, *args, pagination=None, **kwargs):
+        data = AlpacaOSIData(self.json, *args, **kwargs)
+        osis = data["osi"](*args, **kwargs)
+        pagination = data["pagination"](*args, **kwargs)
+        if not bool(pagination): return list(osis)
+        else: return list(osis) + self(*args, pagination=pagination, **kwargs)
 
 
 class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, title="Downloaded"):
@@ -155,16 +152,21 @@ class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, title="Downloa
             size = self.size(dataframe)
             self.console(f"{str(symbol)}[{int(size):.0f}]")
             if self.empty(dataframe): return
-            return dataframe.squeeze()
+            yield dataframe.squeeze()
 
     def download(self, symbols, *args, **kwargs):
+        stocks = list(self.downloader(symbols, *args, **kwargs))
+        stocks = pd.concat(stocks, axis=0)
+        return stocks
+
+    def downloader(self, symbols, *args, **kwargs):
         parameters = dict(tickers=[symbol.ticker for symbol in symbols])
         trade = self.pages.trade(*args, **parameters, **kwargs)
         quote = self.pages.quote(*args, **parameters, **kwargs)
         assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
         header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
         stocks = trade.merge(quote, how="outer", on=list(Querys.Symbol), sort=False, suffixes=("", "_"))[header]
-        return stocks
+        yield stocks
 
     @property
     def columns(self): return self.__columns
@@ -175,7 +177,7 @@ class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, title="Downloa
 class AlpacaContractDownloader(Logging, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__page = AlpacaContractPage(*args, **kwargs)
+        self.__page = AlpacaOSIPage(*args, **kwargs)
 
     def execute(self, trades, *args, **kwargs):
         assert isinstance(trades, (list, Querys.Trade))
@@ -183,19 +185,15 @@ class AlpacaContractDownloader(Logging, title="Downloaded"):
         trades = list(trades) if isinstance(trades, list) else [trades]
         for trade in iter(trades):
             contracts = self.download(trade, *args, **kwargs)
-
-            print(contracts[0:5])
-            raise Exception()
-
-            string = f"{str(trade)}[{len(contracts):.0f}]"
-            self.console(string)
+            self.console(f"{str(trade)}[{len(contracts):.0f}]")
             if not bool(contracts): continue
-            yield contracts
+            yield list(contracts)
 
     def download(self, trade, *args, expires, **kwargs):
         parameters = dict(ticker=trade.ticker, expires=expires, price=trade.price)
-        contracts = self.page(*args, **parameters, **kwargs)
-        assert isinstance(contracts, list)
+        osis = self.page(*args, **parameters, **kwargs)
+        assert isinstance(osis, list)
+        contracts = [Querys.Contract(list(osi)) for osi in osis]
         return contracts
 
     @property
@@ -222,10 +220,24 @@ class AlpacaOptionDownloader(Sizing, Emptying, Partition, Logging, title="Downlo
             if self.empty(dataframe): return
             return dataframe
 
-    def download(self, contracts, *args, underlying={}, **kwargs):
-        parameters = dict(contracts=[contract.toOSI() for contract in contracts])
+    def download(self, contracts, *args, **kwargs):
+
+        print(len(contracts))
+        raise Exception()
+
+        options = list(self.downloader(contracts, *args, **kwargs))
+        options = pd.concat(options, axis=0)
+        return options
+
+    def downloader(self, contracts, *args, **kwargs):
+        parameters = dict(osis=[OSI(contract.ticker, contract.expire, contract.option, contract.strike) for contract in contracts])
         trade = self.pages.trade(*args, **parameters, **kwargs)
         quote = self.pages.quote(*args, **parameters, **kwargs)
+
+        print(trade)
+        print(quote)
+        raise Exception()
+
         assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
         header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
         options = trade.merge(quote, how="outer", on=list(Querys.Contract), sort=False, suffixes=("", "_"))[header]
