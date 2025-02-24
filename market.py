@@ -203,8 +203,9 @@ class AlpacaContractDownloader(Logging, title="Downloaded"):
             contracts = self.download(*args, **parameters, **kwargs)
             assert isinstance(contracts, list)
             for expire, contracts in iter(contracts):
-                expire, contracts = str(expire.strftime("%Y%m%d")), list(contracts)
-                self.console(f"{str(symbol)}|{str(expire)}[{len(contracts):.0f}]")
+                settlement = Querys.Settlement(symbol.ticker, expire)
+                contracts = list(contracts)
+                self.console(f"{str(settlement)}[{len(contracts):.0f}]")
                 if not bool(contracts): continue
                 yield contracts
 
