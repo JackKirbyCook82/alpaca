@@ -103,14 +103,22 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
 
 
 class AlpacaPage(WebJSONPage):
-    def __init_subclass__(cls, *args, data, **kwargs):
+    def __init_subclass__(cls, *args, url, data, **kwargs):
         super().__init_subclass__(*args, **kwargs)
-        cls.data = data
+        cls.__data__ = data
+        cls.__url__ = url
 
     def execute(self, *args, **kwargs):
-        data = type(self).data(self.json, *args, **kwargs)
+        url = self.url(*args, **kwargs)
+        self.load(url, *args, **kwargs)
+        data = self.data(self.json, *args, **kwargs)
         contents = data(*args, **kwargs)
         return contents
+
+    @property
+    def data(self): return type(self).__data__
+    @property
+    def url(self): return type(self).__url__
 
 class AlpacaStockTradePage(AlpacaPage, url=AlpacaStockTradeURL, data=AlpacaStockTradeData): pass
 class AlpacaStockQuotePage(AlpacaPage, url=AlpacaStockQuoteURL, data=AlpacaStockQuoteData): pass
@@ -129,14 +137,14 @@ class AlpacaContractPage(WebJSONPage, url=AlpacaContractURL):
 class AlpacaDownloader(Sizing, Emptying, Partition, Logging, title="Downloaded"):
     def __init_subclass__(cls, *args, trade, quote, **kwargs):
         super().__init_subclass__(*args, **kwargs)
-        cls.trade = trade
-        cls.quote = quote
+        cls.__trade__ = trade
+        cls.__quote__ = quote
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         pages = ntuple("Pages", "trade quote")
-        trade = type(self).trade(*args, **kwargs)
-        quote = type(self).quote(*args, **kwargs)
+        trade = self.trade(*args, **kwargs)
+        quote = self.quote(*args, **kwargs)
         self.__pages = pages(trade, quote)
 
     def download(self, *args, **kwargs):
@@ -150,6 +158,10 @@ class AlpacaDownloader(Sizing, Emptying, Partition, Logging, title="Downloaded")
         dataframe["price"] = dataframe.apply(lambda cols: average(cols) if missing(cols) else cols["price"], axis=1)
         return dataframe
 
+    @property
+    def trade(self): return type(self).__trade__
+    @property
+    def quote(self): return type(self).__quote__
     @property
     def page(self): return self.__pages
 

@@ -39,7 +39,7 @@ class AlpacaOrderPage():
     pass
 
 
-class AlpacaOrderUploader(Logging):
+class AlpacaOrderUploader(Logging, title="Uploaded"):
     def execute(self, orders, *args, **kwargs):
         pass
 
