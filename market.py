@@ -9,7 +9,6 @@ Created on Mon Jan 13 2025
 import pytz
 import numpy as np
 import pandas as pd
-from itertools import groupby
 from datetime import datetime as Datetime
 from collections import namedtuple as ntuple
 
