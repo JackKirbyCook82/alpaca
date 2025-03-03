@@ -85,18 +85,18 @@ class AlpacaData(WebJSON.Mapping, multiple=False, optional=False):
         assert isinstance(contents, list)
         return pd.DataFrame.from_records(contents)
 
-class AlpacaStockTradeData(AlpacaData, locator="//trades", parser=stock_parser): pass
-class AlpacaStockQuoteData(AlpacaData, locator="//quotes", parser=stock_parser): pass
-class AlpacaOptionTradeData(AlpacaData, locator="//trades", parser=option_parser): pass
-class AlpacaOptionQuoteData(AlpacaData, locator="//quotes", parser=option_parser): pass
+class AlpacaStockTradeData(AlpacaData, key="trade", locator="//trades", parser=stock_parser): pass
+class AlpacaStockQuoteData(AlpacaData, key="quote", locator="//quotes", parser=stock_parser): pass
+class AlpacaOptionTradeData(AlpacaData, key="trade", locator="//trades", parser=option_parser): pass
+class AlpacaOptionQuoteData(AlpacaData, key="quote", locator="//quotes", parser=option_parser): pass
 
 class AlpacaContractData(WebJSON, multiple=False, optional=False):
-    class Pagination(WebJSON.Text, locator="next_page_token", key="pagination", parser=str, multiple=False, optional=True): pass
-    class Contracts(WebJSON, locator="option_contracts", key="contracts", parser=Querys.Contract, multiple=True, optional=True):
-        class Ticker(WebJSON.Text, locator="underlying_symbol", key="ticker", parser=str): pass
-        class Expire(WebJSON.Text, locator="expiration_date", key="expire", parser=expire_parser): pass
-        class Option(WebJSON.Text, locator="type", key="option", parser=Variables.Securities.Option): pass
-        class Strike(WebJSON.Text, locator="strike_price", key="strike", parser=strike_parser): pass
+    class Pagination(WebJSON.Text, key="pagination", locator="next_page_token", parser=str, multiple=False, optional=True): pass
+    class Contracts(WebJSON, key="contracts", locator="option_contracts", parser=Querys.Contract, multiple=True, optional=True):
+        class Ticker(WebJSON.Text, key="ticker", locator="underlying_symbol", parser=str): pass
+        class Expire(WebJSON.Text, key="expire", locator="expiration_date", parser=expire_parser): pass
+        class Option(WebJSON.Text, key="option", locator="type", parser=Variables.Securities.Option): pass
+        class Strike(WebJSON.Text, key="strike", locator="strike_price", parser=strike_parser): pass
 
 
 class AlpacaPage(WebJSONPage):
