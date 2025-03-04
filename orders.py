@@ -105,12 +105,10 @@ class AlpacaOrderPage(WebJSONPage):
         assert isinstance(order, AlpacaOrder)
         url = AlpacaOrderURL(*args, **kwargs)
         payload = AlpacaOrderPayload(order, *args, **kwargs)
-        return order
-
-#        self.load(url, *args, payload=payload.json, **kwargs)
-#        data = AlpacaOrderData(self.json, *args, **kwargs)
-#        contents = data(*args, **kwargs)
-#        return contents
+        self.load(url, *args, payload=payload.json, **kwargs)
+        data = AlpacaOrderData(self.json, *args, **kwargs)
+        contents = data(*args, **kwargs)
+        return contents
 
 
 class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
