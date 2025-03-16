@@ -65,7 +65,7 @@ class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v
 
 
 class AlpacaOrderPayload(WebPayload, key="order", fields={"qty": "1", "order_class": "mleg", "extended_hours": "false"}, multiple=False, optional=False):
-    limit = lambda order: {"limit_formatter": f"{-order.spot:.02f}"} if order.term == Variables.Markets.Terms.LIMIT else {}
+    limit = lambda order: {"limit_price": f"{-order.spot:.02f}"} if order.term == Variables.Markets.Terms.LIMIT else {}
     tenure = lambda order: {"time_in_force": tenure_formatter(order)}
     term = lambda order: {"type": term_formatter(order)}
     size = lambda order: {"qty": size_formatter(order)}
@@ -105,17 +105,26 @@ class AlpacaOrderData(WebJSON, key="order", multiple=False, optional=False):
 
 
 class AlpacaOrderPage(WebJSONPage):
+    def __init_subclass__(cls, *args, **kwargs):
+        cls.__payload__ = AlpacaOrderPayload
+        cls.__data__ = AlpacaOrderData
+        cls.__url__ = AlpacaOrderURL
+
     def execute(self, *args, order, **kwargs):
         assert isinstance(order, AlpacaOrder)
-        url = AlpacaOrderURL(*args, **kwargs)
-        payload = AlpacaOrderPayload(order, *args, **kwargs)
-
-        raise Exception()
-
+        url = self.url(*args, **kwargs)
+        payload = self.payload(order, *args, **kwargs)
         self.load(url, *args, payload=payload.json, **kwargs)
-        data = AlpacaOrderData(self.json, *args, **kwargs)
+        data = self.data(self.json, *args, **kwargs)
         contents = data(*args, **kwargs)
         return contents
+
+    @property
+    def payload(self): return type(self).__payload__
+    @property
+    def data(self): return type(self).__data__
+    @property
+    def url(self): return type(self).__url__
 
 
 class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
