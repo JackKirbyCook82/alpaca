@@ -6,7 +6,6 @@ Created on Mon Jan 13 2025
 
 """
 
-import pytz
 import numpy as np
 import pandas as pd
 from datetime import datetime as Datetime
@@ -17,6 +16,7 @@ from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 from support.mixins import Emptying, Sizing, Partition, Logging
+from support.custom import SliceOrderedDict as SODict
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -25,32 +25,30 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-timestamp_parser = lambda string: Datetime.fromisoformat(string).astimezone(pytz.timezone("US/Central"))
-current_parser = lambda string: np.datetime64(timestamp_parser(string))
 price_parsers = {code: (key, lambda value: np.float32(value)) for key, code in {"price": "p", "ask": "ap", "bid": "bp"}.items()}
 size_parsers = {code: (key, lambda value: np.int32(value)) for key, code in {"supply": "as", "demand": "bs"}.items()}
-date_parsers = {"t": ("current", lambda value: current_parser(value))}
-contents_parsers = price_parsers | size_parsers | date_parsers
+contents_parsers = price_parsers | size_parsers
+
 contents_parser = lambda contents: {key: function(contents[code]) for code, (key, function) in contents_parsers.items() if code in contents.keys()}
 stock_parser = lambda mapping: [{"ticker": ticker} | contents_parser(contents) for ticker, contents in mapping.items()]
 option_parser = lambda mapping: [dict(OSI(osi)) | contents_parser(contents) for osi, contents in mapping.items()]
-strike_parser = lambda content: np.round(float(content), 2).astype(np.float32)
-expire_parser = lambda string: Datetime.strptime(string, "%Y-%m-%d")
+expire_parser = lambda string: Datetime.strptime(string, "%Y-%m-%d").date()
+strike_parser = lambda content: np.round(float(content), 2)
 
 
-class AlpacaURL(WebURL, headers={"accept": "application/json"}):
+class AlpacaMarketURL(WebURL, headers={"accept": "application/json"}):
     @staticmethod
     def headers(*args, api, **kwargs):
         assert isinstance(api, tuple)
         return {"APCA-API-KEY-ID": str(api.identity), "APCA-API-SECRET-KEY": str(api.code)}
 
-class AlpacaStockURL(AlpacaURL, domain="https://data.alpaca.markets", path=["v2", "stocks"], parameters={"feed": "delayed_sip"}):
+class AlpacaStockURL(AlpacaMarketURL, domain="https://data.alpaca.markets", path=["v2", "stocks"], parameters={"feed": "delayed_sip"}):
     @staticmethod
     def parameters(*args, tickers, **kwargs):
         assert isinstance(tickers, list)
         return {"symbols": ",".join(list(map(str, tickers)))}
 
-class AlpacaOptionURL(AlpacaURL, domain="https://data.alpaca.markets", path=["v1beta1", "options"], parameters={"feed": "indicative"}):
+class AlpacaOptionURL(AlpacaMarketURL, domain="https://data.alpaca.markets", path=["v1beta1", "options"], parameters={"feed": "indicative"}):
     @staticmethod
     def parameters(*args, osis, **kwargs):
         assert isinstance(osis, list)
@@ -61,7 +59,7 @@ class AlpacaStockQuoteURL(AlpacaStockURL, path=["quotes", "latest"]): pass
 class AlpacaOptionTradeURL(AlpacaOptionURL, path=["trades", "latest"]): pass
 class AlpacaOptionQuoteURL(AlpacaOptionURL, path=["quotes", "latest"]): pass
 
-class AlpacaContractURL(AlpacaURL, domain="https://paper-api.alpaca.markets", path=["v2", "options", "contracts"], parameters={"show_deliverables": "false", "limit": "10000"}):
+class AlpacaContractURL(AlpacaMarketURL, domain="https://paper-api.alpaca.markets", path=["v2", "options", "contracts"], parameters={"show_deliverables": "false", "limit": "10000"}):
     @classmethod
     def parameters(cls, *args, **kwargs):
         tickers = cls.tickers(*args, **kwargs)
@@ -79,16 +77,16 @@ class AlpacaContractURL(AlpacaURL, domain="https://paper-api.alpaca.markets", pa
     def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if bool(pagination) else {}
 
 
-class AlpacaData(WebJSON.Mapping, multiple=False, optional=False):
+class AlpacaMarketData(WebJSON.Mapping, multiple=False, optional=False):
     def execute(self, *args, **kwargs):
         contents = super().execute(*args, **kwargs)
         assert isinstance(contents, list)
         return pd.DataFrame.from_records(contents)
 
-class AlpacaStockTradeData(AlpacaData, key="trade", locator="//trades", parser=stock_parser): pass
-class AlpacaStockQuoteData(AlpacaData, key="quote", locator="//quotes", parser=stock_parser): pass
-class AlpacaOptionTradeData(AlpacaData, key="trade", locator="//trades", parser=option_parser): pass
-class AlpacaOptionQuoteData(AlpacaData, key="quote", locator="//quotes", parser=option_parser): pass
+class AlpacaStockTradeData(AlpacaMarketData, key="trade", locator="//trades", parser=stock_parser): pass
+class AlpacaStockQuoteData(AlpacaMarketData, key="quote", locator="//quotes", parser=stock_parser): pass
+class AlpacaOptionTradeData(AlpacaMarketData, key="trade", locator="//trades", parser=option_parser): pass
+class AlpacaOptionQuoteData(AlpacaMarketData, key="quote", locator="//quotes", parser=option_parser): pass
 
 class AlpacaContractData(WebJSON, multiple=False, optional=False):
     class Pagination(WebJSON.Text, key="pagination", locator="next_page_token", parser=str, multiple=False, optional=True): pass
@@ -99,7 +97,7 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
         class Strike(WebJSON.Text, key="strike", locator="strike_price", parser=strike_parser): pass
 
 
-class AlpacaPage(WebJSONPage):
+class AlpacaMarketPage(WebJSONPage):
     def __init_subclass__(cls, *args, url, data, **kwargs):
         super().__init_subclass__(*args, **kwargs)
         cls.__data__ = data
@@ -108,8 +106,8 @@ class AlpacaPage(WebJSONPage):
     def execute(self, *args, **kwargs):
         url = self.url(*args, **kwargs)
         self.load(url, *args, **kwargs)
-        data = self.data(self.json, *args, **kwargs)
-        contents = data(*args, **kwargs)
+        datas = self.data(self.json, *args, **kwargs)
+        contents = datas(*args, **kwargs)
         return contents
 
     @property
@@ -117,18 +115,18 @@ class AlpacaPage(WebJSONPage):
     @property
     def url(self): return type(self).__url__
 
-class AlpacaStockTradePage(AlpacaPage, url=AlpacaStockTradeURL, data=AlpacaStockTradeData): pass
-class AlpacaStockQuotePage(AlpacaPage, url=AlpacaStockQuoteURL, data=AlpacaStockQuoteData): pass
-class AlpacaOptionTradePage(AlpacaPage, url=AlpacaOptionTradeURL, data=AlpacaOptionTradeData): pass
-class AlpacaOptionQuotePage(AlpacaPage, url=AlpacaOptionQuoteURL, data=AlpacaOptionQuoteData): pass
+class AlpacaStockTradePage(AlpacaMarketPage, url=AlpacaStockTradeURL, data=AlpacaStockTradeData): pass
+class AlpacaStockQuotePage(AlpacaMarketPage, url=AlpacaStockQuoteURL, data=AlpacaStockQuoteData): pass
+class AlpacaOptionTradePage(AlpacaMarketPage, url=AlpacaOptionTradeURL, data=AlpacaOptionTradeData): pass
+class AlpacaOptionQuotePage(AlpacaMarketPage, url=AlpacaOptionQuoteURL, data=AlpacaOptionQuoteData): pass
 
 class AlpacaContractPage(WebJSONPage):
     def execute(self, *args, pagination=None, **kwargs):
         url = AlpacaContractURL(*args, pagination=pagination, **kwargs)
         self.load(url, *args, **kwargs)
-        data = AlpacaContractData(self.json, *args, **kwargs)
-        contents = [contract(*args, **kwargs) for contract in data["contracts"]]
-        pagination = data["pagination"](*args, **kwargs)
+        datas = AlpacaContractData(self.json, *args, **kwargs)
+        contents = [data(*args, **kwargs) for data in datas["contracts"]]
+        pagination = datas["pagination"](*args, **kwargs)
         if not bool(pagination): return list(contents)
         else: return list(contents) + self.execute(args, pagination=pagination, **kwargs)
 
@@ -142,13 +140,18 @@ class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, title="Downloa
         self.__pages = pages(trade, quote)
 
     def execute(self, symbols, *args, **kwargs):
-        assert isinstance(symbols, (list, Querys.Symbol))
-        assert all([isinstance(symbol, Querys.Symbol) for symbol in symbols]) if isinstance(symbols, list) else True
-        symbols = list(symbols) if isinstance(symbols, list) else [symbols]
+        assert isinstance(symbols, (list, dict, Querys.Symbol))
+        assert all([isinstance(symbol, Querys.Symbol) for symbol in symbols]) if isinstance(symbols, (list, dict)) else True
+        if isinstance(symbols, Querys.Symbol): symbols = [symbols]
+        elif isinstance(symbols, dict): symbols = SODict(symbols)
+        else: symbols = list(symbols)
         if not bool(symbols): return
         parameters = dict(tickers=[str(symbol.ticker) for symbol in symbols])
         dataframe = self.download(*args, **parameters, **kwargs)
         assert isinstance(dataframe, pd.DataFrame)
+        if isinstance(symbols, dict):
+            function = lambda series: symbols[Querys.Symbol(series.to_dict())]
+            dataframe["quantity"] = dataframe[list(Querys.Symbol)].apply(function, axis=1)
         for symbol, stocks in self.partition(dataframe, by=Querys.Symbol):
             size = self.size(stocks)
             self.console(f"{str(symbol)}[{int(size):.0f}]")
@@ -160,7 +163,7 @@ class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, title="Downloa
         quote = self.pages.quote(*args, **kwargs)
         assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
         header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
-        average = lambda cols: np.round((cols["ask"] + cols["bid"]) / 2, 2).astype(np.float32)
+        average = lambda cols: np.round((cols["ask"] + cols["bid"]) / 2, 2)
         missing = lambda cols: np.isnan(cols["price"])
         dataframe = quote.merge(trade, how="outer", on=list(Querys.Symbol), sort=False, suffixes=("", "_"))[header]
         dataframe["price"] = dataframe.apply(lambda cols: average(cols) if missing(cols) else cols["price"], axis=1)
@@ -179,15 +182,20 @@ class AlpacaOptionDownloader(Sizing, Emptying, Partition, Logging, title="Downlo
         self.__pages = pages(trade, quote)
 
     def execute(self, contracts, *args, **kwargs):
-        assert isinstance(contracts, (list, Querys.Contract))
-        assert all([isinstance(contract, Querys.Contract) for contract in contracts]) if isinstance(contracts, list) else True
-        contracts = list(contracts) if isinstance(contracts, list) else [contracts]
+        assert isinstance(contracts, (list, dict, Querys.Contract))
+        assert all([isinstance(contract, Querys.Contract) for contract in contracts]) if isinstance(contracts, (list, dict)) else True
+        if isinstance(contracts, Querys.Contract): contracts = [contracts]
+        elif isinstance(contracts, dict): contracts = SODict(contracts)
+        else: contracts = list(contracts)
         if not bool(contracts): return
         contracts = [contracts[index:index+100] for index in range(0, len(contracts), 100)]
         for contracts in iter(contracts):
-            parameters = dict(osis=[OSI([contract.ticker, contract.expire, contract.option, contract.strike]) for contract in contracts])
+            parameters = dict(osis=list(map(OSI, contracts)))
             dataframe = self.download(*args, **parameters, **kwargs)
             assert isinstance(dataframe, pd.DataFrame)
+            if isinstance(contracts, dict):
+                function = lambda series: contracts[Querys.Contract(series.to_dict())]
+                dataframe["quantity"] = dataframe[list(Querys.Contract)].apply(function, axis=1)
             for settlement, options in self.partition(dataframe, by=Querys.Settlement):
                 size = self.size(options)
                 self.console(f"{str(settlement)}[{int(size):.0f}]")
@@ -199,7 +207,7 @@ class AlpacaOptionDownloader(Sizing, Emptying, Partition, Logging, title="Downlo
         quote = self.pages.quote(*args, **kwargs)
         assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
         header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
-        average = lambda cols: np.round((cols["ask"] + cols["bid"]) / 2, 2).astype(np.float32)
+        average = lambda cols: np.round((cols["ask"] + cols["bid"]) / 2, 2)
         missing = lambda cols: np.isnan(cols["price"])
         dataframe = quote.merge(trade, how="outer", on=list(Querys.Contract), sort=False, suffixes=("", "_"))[header]
         dataframe["price"] = dataframe.apply(lambda cols: average(cols) if missing(cols) else cols["price"], axis=1)
