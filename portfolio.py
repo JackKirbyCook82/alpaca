@@ -89,7 +89,7 @@ class AlpacaPortfolioDownloader(Logging, Partition, title="Downloaded"):
         function = lambda series: Querys.Symbol(series.to_dict())
         dataframe[str(Querys.Symbol)] = dataframe[list(Querys.Symbol)].apply(function, axis=1)
         dataframe = dataframe.set_index(str(Querys.Symbol), drop=True, inplace=False)
-        securities = dataframe[["quantity", "entry"]].to_dict("index")
+        securities = dataframe[["quantity"]].to_dict("index")
         return securities
 
     @staticmethod
@@ -99,7 +99,7 @@ class AlpacaPortfolioDownloader(Logging, Partition, title="Downloaded"):
         function = lambda series: Querys.Contract(series.to_dict())
         dataframe[str(Querys.Contract)] = dataframe[list(Querys.Contract)].apply(function, axis=1)
         dataframe = dataframe.set_index(str(Querys.Contract), drop=True, inplace=False)
-        securities = dataframe[["quantity", "entry"]].to_dict("index")
+        securities = dataframe[["quantity"]].to_dict("index")
         return securities
 
     @property
