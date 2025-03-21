@@ -31,7 +31,7 @@ strike_parser = lambda string: OSI(string).strike if instrument_parser(string) =
 limit_parser = lambda string: np.round(float(string), 2) if not isinstance(string, types.NoneType) else None
 stop_parser = lambda string: np.round(float(string), 2) if not isinstance(string, types.NoneType) else None
 position_parser = lambda string: {"buy": Variables.Securities.Position.LONG, "sell": Variables.Securities.Position.SHORT}[string]
-term_parser = lambda string: {"market": Variables.Markets.Terms.MARKET, "limit": Variables.Markets.Terms.LIMIT}[string]
+term_parser = lambda string: {"market": Variables.Markets.Term.MARKET, "limit": Variables.Markets.Term.LIMIT}[string]
 tenure_parser = lambda string: {"day": Variables.Markets.Tenure.DAY, "fok": Variables.Markets.Tenure.FILLKILL}[string]
 action_parser = lambda string: {"buy": Variables.Markets.Action.BUY, "sell": Variables.Markets.Action.SELL}[string]
 
@@ -41,14 +41,14 @@ security_formatter = lambda security: {Variables.Securities.Instrument.STOCK: st
 quantity_formatter = lambda security: {Variables.Securities.Instrument.STOCK: "100", Variables.Securities.Instrument.OPTION: "1"}[security.instrument]
 action_formatter = lambda security: {Variables.Securities.Position.LONG: "buy", Variables.Securities.Position.SHORT: "sell"}[security.position]
 tenure_formatter = lambda order: {Variables.Markets.Tenure.DAY: "day", Variables.Markets.Tenure.FILLKILL: "fok"}[order.tenure]
-term_formatter = lambda order: {Variables.Markets.Terms.MARKET: "market", Variables.Markets.Terms.LIMIT: "limit"}[order.term]
+term_formatter = lambda order: {Variables.Markets.Term.MARKET: "market", Variables.Markets.Term.LIMIT: "limit"}[order.term]
 
 
 class AlpacaSecurity(Naming, fields=["ticker", "expire", "instrument", "option", "position", "strike"]):
     def __str__(self): return security_formatter(self)
 
-class AlpacaOrder(Naming, fields=["term", "tenure", "size", "limit", "stop", "security"]):
-    def __len__(self): return len(self.security)
+class AlpacaOrder(Naming, fields=["term", "tenure", "size", "limit", "stop", "securities"]):
+    def __len__(self): return len(self.securities)
 
 
 class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "orders"], headers={"accept": "application/json", "content-type": "application/json"}):
@@ -59,8 +59,8 @@ class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v
 
 
 class AlpacaOrderPayload(WebPayload, key="order", fields={"qty": "1", "order_class": "mleg"}, multiple=False, optional=False):
-    limit = lambda order: {"limit_price": f"{order.limit:.02f}"} if order.term in (Variables.Markets.Market.Term.LIMIT, Variables.Markets.Market.Term.STOPLIMIT) else {}
-    stop = lambda order: {"stop_price": f"{order.stop:.02f}"} if order.term in (Variables.Markets.Market.Term.STOP, Variables.Markets.Market.Term.STOPLIMIT) else {}
+    limit = lambda order: {"limit_price": f"{order.limit:.02f}"} if order.term in (Variables.Markets.Term.LIMIT, Variables.Markets.Term.STOPLIMIT) else {}
+    stop = lambda order: {"stop_price": f"{order.stop:.02f}"} if order.term in (Variables.Markets.Term.STOP, Variables.Markets.Term.STOPLIMIT) else {}
     tenure = lambda order: {"time_in_force": tenure_formatter(order)}
     term = lambda order: {"type": term_formatter(order)}
     size = lambda order: {"qty": str(order.size)}
@@ -120,26 +120,30 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
         for settlement, order in self.orders(prospects, *args, **kwargs):
-            order = self.page(*args, order=order, **kwargs)
-            assert order.term in (Variables.Markets.Terms.MARKET, Variables.Markets.Terms.LIMIT)
+            order = self.upload(order, *args, **kwargs)
             spot = - np.round(order.spot, 2).astype(np.float32)
             self.console(f"{str(settlement)}[{len(order):.0f}]")
             cashflow = "expense" if bool(spot <= 0) else "revenue"
             self.console(f"${abs(spot):.2f} {cashflow}", title="Cashflow")
 
+    def upload(self, order, *args, **kwargs):
+        order = self.page(*args, order=order, **kwargs)
+        assert order.term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
+        return order
+
     @staticmethod
     def orders(prospects, *args, term, tenure, **kwargs):
-        assert term in (Variables.Markets.Terms.MARKET, Variables.Markets.Terms.LIMIT)
+        assert term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
         header = ["strategy", "spot", "size"] + list(Querys.Settlement) + list(map(str, Securities.Options))
         orders = prospects.loc[:, prospects.columns.get_level_values(0).isin(set(header))].droplevel(1, axis=1)
         for index, order in orders.iterrows():
             order = order.dropna(inplace=False)
             price = - np.round(order.spot, 2).astype(np.float32)
             settlement = Querys.Settlement([order.ticker, order.expire])
-            stocks = [dict(ticker=order.ticker, security=security) for security in order.strategy.stocks]
-            options = [dict(ticker=order.ticker, expire=order.expire, security=security, strike=order[str(security)]) for security in order.strategy.options]
-            securities = [AlpacaSecurity(**security) for security in stocks + options]
-            order = AlpacaOrder(limit=price, stop=None, term=term, tenure=tenure, size=order.size, securities=securities)
+            function = lambda security: dict(instrument=security.instrument, option=security.option, position=security.position)
+            stocks = [AlpacaSecurity(ticker=order.ticker, **function(security)) for security in order.strategy.stocks]
+            options = [AlpacaSecurity(ticker=order.ticker, expire=order.expire, strike=order[str(security)], **function(security)) for security in order.strategy.options]
+            order = AlpacaOrder(limit=price, stop=None, term=term, tenure=tenure, size=order.size, securities=stocks + options)
             yield settlement, order
 
     @property

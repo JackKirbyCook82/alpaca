@@ -8,6 +8,7 @@ Created on Mon Jan 13 2025
 
 import numpy as np
 import pandas as pd
+from abc import ABC
 from datetime import datetime as Datetime
 from collections import namedtuple as ntuple
 
@@ -131,90 +132,83 @@ class AlpacaContractPage(WebJSONPage):
         else: return list(contents) + self.execute(args, pagination=pagination, **kwargs)
 
 
-class AlpacaStockDownloader(Sizing, Emptying, Partition, Logging, title="Downloaded"):
+class AlpacaSecurityDownloader(Sizing, Emptying, Partition, Logging, ABC, title="Downloaded"):
+    def __init_subclass__(cls, *args, **kwargs):
+        super().__init_subclass__(*args, **kwargs)
+        cls.__trade__ = kwargs.get("trade", getattr(cls, "__trade__", None))
+        cls.__quote__ = kwargs.get("quote", getattr(cls, "__quote__", None))
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        pages = ntuple("Pages", "trade quote")
-        trade = AlpacaStockTradePage(*args, **kwargs)
-        quote = AlpacaStockQuotePage(*args, **kwargs)
-        self.__pages = pages(trade, quote)
+        Technicals = ntuple("Pages", "trade, quote")
+        trade = self.trade(*args, **kwargs)
+        quote = self.quote(*args, **kwargs)
+        self.__pages = Technicals(trade, quote)
 
-    def execute(self, symbols, *args, **kwargs):
-        assert isinstance(symbols, (list, dict, Querys.Symbol))
-        assert all([isinstance(symbol, Querys.Symbol) for symbol in symbols]) if isinstance(symbols, (list, dict)) else True
-        if isinstance(symbols, Querys.Symbol): symbols = [symbols]
-        elif isinstance(symbols, dict): symbols = SODict(symbols)
-        else: symbols = list(symbols)
-        if not bool(symbols): return
-        parameters = dict(tickers=[str(symbol.ticker) for symbol in symbols])
-        dataframe = self.download(*args, **parameters, **kwargs)
-        assert isinstance(dataframe, pd.DataFrame)
-        if isinstance(symbols, dict):
-            function = lambda series: symbols[Querys.Symbol(series.to_dict())]
-            dataframe["quantity"] = dataframe[list(Querys.Symbol)].apply(function, axis=1)
-        for symbol, stocks in self.partition(dataframe, by=Querys.Symbol):
-            size = self.size(stocks)
-            self.console(f"{str(symbol)}[{int(size):.0f}]")
-            if self.empty(stocks): return
-            yield stocks
-
-    def download(self, *args, **kwargs):
+    def download(self, *args, query, **kwargs):
         trade = self.pages.trade(*args, **kwargs)
         quote = self.pages.quote(*args, **kwargs)
         assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
         header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
         average = lambda cols: np.round((cols["ask"] + cols["bid"]) / 2, 2)
         missing = lambda cols: np.isnan(cols["price"])
-        dataframe = quote.merge(trade, how="outer", on=list(Querys.Symbol), sort=False, suffixes=("", "_"))[header]
+        dataframe = quote.merge(trade, how="outer", on=list(query), sort=False, suffixes=("", "_"))[header]
         dataframe["price"] = dataframe.apply(lambda cols: average(cols) if missing(cols) else cols["price"], axis=1)
         return dataframe
 
+    @staticmethod
+    def querys(querys, querytype):
+        assert isinstance(querys, (list, dict, querytype))
+        assert all([isinstance(query, querytype) for query in querys]) if isinstance(querys, (list, dict)) else True
+        if isinstance(querys, querytype): querys = [querys]
+        elif isinstance(querys, dict): querys = SODict(querys)
+        else: querys = list(querys)
+        return querys
+
+    @property
+    def trade(self): return type(self).__trade__
+    @property
+    def quote(self): return type(self).__quote__
     @property
     def pages(self): return self.__pages
 
 
-class AlpacaOptionDownloader(Sizing, Emptying, Partition, Logging, title="Downloaded"):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        pages = ntuple("Pages", "trade quote")
-        trade = AlpacaOptionTradePage(*args, **kwargs)
-        quote = AlpacaOptionQuotePage(*args, **kwargs)
-        self.__pages = pages(trade, quote)
+class AlpacaStockDownloader(AlpacaSecurityDownloader, trade=AlpacaStockTradePage, quote=AlpacaStockQuotePage):
+    def execute(self, symbols, *args, **kwargs):
+        symbols = self.querys(symbols, Querys.Symbol)
+        if not bool(symbols): return
+        parameters = dict(tickers=[str(symbol.ticker) for symbol in symbols], query=Querys.Symbol)
+        stocks = self.download(*args, **parameters, **kwargs)
+        assert isinstance(stocks, pd.DataFrame)
+        if isinstance(symbols, dict):
+            function = lambda series: symbols[Querys.Symbol(series.to_dict())]
+            values = stocks[list(Querys.Symbol)].apply(function, axis=1, result_type="expand")
+            stocks = pd.concat([stocks, values], axis=1)
+        for query, stock in self.partition(stocks, by=Querys.Symbol):
+            size = self.size(stock)
+            self.console(f"{str(query)}[{int(size):.0f}]")
+            if self.empty(stock): return
+            yield stock
 
+
+class AlpacaOptionDownloader(AlpacaSecurityDownloader, trade=AlpacaOptionTradePage, quote=AlpacaOptionQuotePage):
     def execute(self, contracts, *args, **kwargs):
-        assert isinstance(contracts, (list, dict, Querys.Contract))
-        assert all([isinstance(contract, Querys.Contract) for contract in contracts]) if isinstance(contracts, (list, dict)) else True
-        if isinstance(contracts, Querys.Contract): contracts = [contracts]
-        elif isinstance(contracts, dict): contracts = SODict(contracts)
-        else: contracts = list(contracts)
+        contracts = self.querys(contracts, Querys.Contract)
         if not bool(contracts): return
         contracts = [contracts[index:index+100] for index in range(0, len(contracts), 100)]
         for contracts in iter(contracts):
-            parameters = dict(osis=list(map(OSI, contracts)))
-            dataframe = self.download(*args, **parameters, **kwargs)
-            assert isinstance(dataframe, pd.DataFrame)
+            parameters = dict(osis=list(map(OSI, contracts)), query=Querys.Contract)
+            options = self.download(*args, **parameters, **kwargs)
+            assert isinstance(options, pd.DataFrame)
             if isinstance(contracts, dict):
                 function = lambda series: contracts[Querys.Contract(series.to_dict())]
-                dataframe["quantity"] = dataframe[list(Querys.Contract)].apply(function, axis=1)
-            for settlement, options in self.partition(dataframe, by=Querys.Settlement):
-                size = self.size(options)
+                values = options[list(Querys.Contract)].apply(function, axis=1, result_type="expand")
+                options = pd.concat([options, values], axis=1)
+            for settlement, dataframe in self.partition(options, by=Querys.Settlement):
+                size = self.size(dataframe)
                 self.console(f"{str(settlement)}[{int(size):.0f}]")
-                if self.empty(options): continue
-                yield options
-
-    def download(self, *args, **kwargs):
-        trade = self.pages.trade(*args, **kwargs)
-        quote = self.pages.quote(*args, **kwargs)
-        assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
-        header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
-        average = lambda cols: np.round((cols["ask"] + cols["bid"]) / 2, 2)
-        missing = lambda cols: np.isnan(cols["price"])
-        dataframe = quote.merge(trade, how="outer", on=list(Querys.Contract), sort=False, suffixes=("", "_"))[header]
-        dataframe["price"] = dataframe.apply(lambda cols: average(cols) if missing(cols) else cols["price"], axis=1)
-        return dataframe
-
-    @property
-    def pages(self): return self.__pages
+                if self.empty(dataframe): continue
+                yield dataframe
 
 
 class AlpacaContractDownloader(Logging, title="Downloaded"):
@@ -222,23 +216,28 @@ class AlpacaContractDownloader(Logging, title="Downloaded"):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaContractPage(*args, **kwargs)
 
-    def execute(self, symbols, *args, expires, **kwargs):
-        assert isinstance(symbols, (list, Querys.Symbol))
-        assert all([isinstance(symbol, Querys.Symbol) for symbol in symbols]) if isinstance(symbols, list) else True
-        symbols = list(symbols) if isinstance(symbols, list) else [symbols]
+    def execute(self, symbols, *args, **kwargs):
+        symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
         for symbol in iter(symbols):
-            parameters = dict(ticker=str(symbol.ticker), expires=expires)
-            contracts = self.download(*args, **parameters, **kwargs)
+            contracts = self.download(*args, ticker=symbol.ticker, **kwargs)
             self.console(f"{str(symbol)}[{len(contracts):.0f}]")
             if not bool(contracts): continue
             yield contracts
 
-    def download(self, *args, **kwargs):
-        contracts = self.page(*args, **kwargs)
+    def download(self, *args, ticker, expires, **kwargs):
+        parameters = dict(ticker=ticker, expires=expires)
+        contracts = self.page(*args, **parameters, **kwargs)
         assert isinstance(contracts, list)
         contracts.sort(key=lambda contract: contract.expire)
         return contracts
+
+    @staticmethod
+    def querys(querys, querytype):
+        assert isinstance(querys, (list, querytype))
+        assert all([isinstance(query, querytype) for query in querys]) if isinstance(querys, list) else True
+        querys = list(querys) if isinstance(querys, list) else [querys]
+        return querys
 
     @property
     def page(self): return self.__page

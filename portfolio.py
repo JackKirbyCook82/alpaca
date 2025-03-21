@@ -27,6 +27,7 @@ expire_parser = lambda string: OSI(string).expire if instrument_parser(string) =
 option_parser = lambda string: OSI(string).option if instrument_parser(string) == Variables.Securities.Instrument.OPTION else Variables.Securities.Option.EMPTY
 strike_parser = lambda string: OSI(string).strike if instrument_parser(string) == Variables.Securities.Instrument.OPTION else None
 position_parser = lambda string: {"long": Variables.Securities.Position.LONG, "short": Variables.Securities.Position.SHORT}[string]
+price_parser = lambda string: np.round(float(string), 2)
 
 
 class AlpacaPortfolioURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "positions"], headers={"accept": "application/json"}):
@@ -43,6 +44,7 @@ class AlpacaPortfolioData(WebJSON, key="portfolio", multiple=True, optional=True
     class Option(WebJSON.Text, key="option", locator="symbol", parser=option_parser): pass
     class Position(WebJSON.Text, key="position", locator="side", parser=position_parser): pass
     class Strike(WebJSON.Text, key="strike", locator="symbol", parser=strike_parser): pass
+    class Entry(WebJSON.Text, key="entry", locator="avg_entry_price", parser=price_parser): pass
     class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=np.int32): pass
 
     def execute(self, *args, **kwargs):
@@ -53,11 +55,6 @@ class AlpacaPortfolioData(WebJSON, key="portfolio", multiple=True, optional=True
 
 
 class AlpacaPortfolioPage(WebJSONPage):
-    def __init_subclass__(cls, *args, url, data, **kwargs):
-        super().__init_subclass__(*args, **kwargs)
-        cls.__data__ = data
-        cls.__url__ = url
-
     def execute(self, *args, **kwargs):
         url = AlpacaPortfolioURL(*args, **kwargs)
         self.load(url, *args, **kwargs)
@@ -73,33 +70,37 @@ class AlpacaPortfolioDownloader(Logging, Partition, title="Downloaded"):
         self.__page = AlpacaPortfolioPage(*args, **kwargs)
 
     def execute(self, *args, **kwargs):
-        portfolio = self.page(*args, **kwargs)
+        portfolio = self.download(*args, **kwargs)
         for settlement, dataframe in self.partition(portfolio, by=Querys.Settlement):
             size = dataframe["quantity"].apply(np.abs).sum()
             self.console(f"{str(settlement)}[{int(size):.0f}]")
-        stocks = self.stocks(portfolio, *args, **kwargs)
+        self.stocks(portfolio, *args, **kwargs)
         options = self.options(portfolio, *args, **kwargs)
-        yield stocks, options
+        yield options
+
+    def download(self, *args, **kwargs):
+        portfolio = self.page(*args, **kwargs)
+        return portfolio
 
     @staticmethod
     def stocks(portfolio, *args, **kwargs):
-        mask = portfolio["option"] == Variables.Securities.Option.EMPTY
+        mask = portfolio["option"].isin([Variables.Securities.Option.EMPTY])
         dataframe = portfolio.where(mask).dropna(how="all", inplace=False)
         function = lambda series: Querys.Symbol(series.to_dict())
-        dataframe["symbol"] = dataframe[list(Querys.Symbol)].apply(function, axis=1)
-        dataframe = dataframe.set_index("symbol", drop=True, inplace=False)
-        symbol = dataframe["quantity"].to_dict()
-        return symbol
+        dataframe[str(Querys.Symbol)] = dataframe[list(Querys.Symbol)].apply(function, axis=1)
+        dataframe = dataframe.set_index(str(Querys.Symbol), drop=True, inplace=False)
+        securities = dataframe[["quantity", "entry"]].to_dict("index")
+        return securities
 
     @staticmethod
     def options(portfolio, *args, **kwargs):
         mask = portfolio["option"].isin([Variables.Securities.Option.PUT, Variables.Securities.Option.CALL])
         dataframe = portfolio.where(mask).dropna(how="all", inplace=False)
         function = lambda series: Querys.Contract(series.to_dict())
-        dataframe["contract"] = dataframe[list(Querys.Contract)].apply(function, axis=1)
-        dataframe = dataframe.set_index("contract", drop=True, inplace=False)
-        contracts = dataframe["quantity"].to_dict()
-        return contracts
+        dataframe[str(Querys.Contract)] = dataframe[list(Querys.Contract)].apply(function, axis=1)
+        dataframe = dataframe.set_index(str(Querys.Contract), drop=True, inplace=False)
+        securities = dataframe[["quantity", "entry"]].to_dict("index")
+        return securities
 
     @property
     def page(self): return self.__page
