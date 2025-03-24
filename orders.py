@@ -15,6 +15,7 @@ from webscraping.weburl import WebURL, WebPayload
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from support.mixins import Emptying, Logging, Naming
+from support.meta import RegistryMeta
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -23,32 +24,49 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-instrument_parser = lambda string: Variables.Securities.Instrument.OPTION if any(list(map(str.isdigit, string))) else Variables.Securities.Instrument.STOCK
-ticker_parser = lambda string: OSI(string).ticker if instrument_parser(string) == Variables.Securities.Instrument.OPTION else str(string).upper()
-expire_parser = lambda string: OSI(string).expire if instrument_parser(string) == Variables.Securities.Instrument.OPTION else None
-option_parser = lambda string: OSI(string).option if instrument_parser(string) == Variables.Securities.Instrument.OPTION else Variables.Securities.Option.EMPTY
-strike_parser = lambda string: OSI(string).strike if instrument_parser(string) == Variables.Securities.Instrument.OPTION else None
-limit_parser = lambda string: np.round(float(string), 2) if not isinstance(string, types.NoneType) else None
-stop_parser = lambda string: np.round(float(string), 2) if not isinstance(string, types.NoneType) else None
 position_parser = lambda string: {"buy": Variables.Securities.Position.LONG, "sell": Variables.Securities.Position.SHORT}[string]
 term_parser = lambda string: {"market": Variables.Markets.Term.MARKET, "limit": Variables.Markets.Term.LIMIT}[string]
 tenure_parser = lambda string: {"day": Variables.Markets.Tenure.DAY, "fok": Variables.Markets.Tenure.FILLKILL}[string]
 action_parser = lambda string: {"buy": Variables.Markets.Action.BUY, "sell": Variables.Markets.Action.SELL}[string]
+limit_parser = lambda string: np.round(float(string), 2) if not isinstance(string, types.NoneType) else None
+stop_parser = lambda string: np.round(float(string), 2) if not isinstance(string, types.NoneType) else None
+ticker_parser = lambda string: OSI(string).ticker
+expire_parser = lambda string: OSI(string).expire
+option_parser = lambda string: OSI(string).option
+strike_parser = lambda string: OSI(string).strike
 
-stock_formatter = lambda security: str(security.ticker).upper()
 option_formatter = lambda security: str(OSI([security.ticker, security.expire, security.option, security.strike]))
-security_formatter = lambda security: {Variables.Securities.Instrument.STOCK: stock_formatter, Variables.Securities.Instrument.OPTION: option_formatter}[security.instrument](security)
-quantity_formatter = lambda security: {Variables.Securities.Instrument.STOCK: "100", Variables.Securities.Instrument.OPTION: "1"}[security.instrument]
 action_formatter = lambda security: {Variables.Securities.Position.LONG: "buy", Variables.Securities.Position.SHORT: "sell"}[security.position]
 tenure_formatter = lambda order: {Variables.Markets.Tenure.DAY: "day", Variables.Markets.Tenure.FILLKILL: "fok"}[order.tenure]
 term_formatter = lambda order: {Variables.Markets.Term.MARKET: "market", Variables.Markets.Term.LIMIT: "limit"}[order.term]
 
 
 class AlpacaSecurity(Naming, fields=["ticker", "expire", "instrument", "option", "position", "strike"]):
-    def __str__(self): return security_formatter(self)
+    def __str__(self): return str(OSI([self.ticker, self.expire, self.option, self.strike]))
+    def __new__(cls, *args, settlement, security, strike, **kwargs):
+        return super().__new__(cls, strike=strike, **dict(settlement.items()), **dict(security.items()))
 
-class AlpacaOrder(Naming, fields=["term", "tenure", "size", "limit", "stop", "securities"]):
+class AlpacaValuation(Naming, metaclass=RegistryMeta): pass
+class AlpacaArbitrage(AlpacaValuation, fields=["apy", "npv"], register=Variables.Valuations.Valuation.ARBITRAGE):
+    def __str__(self): return f"{self.formatter(self.apy * 100, pre='%')}, {self.formatter(self.npv, pre='$')}"
+    def __new__(cls, prospect, *args, **kwargs):
+        apy = prospect[("apy", Variables.Valuations.Scenario.MINIMUM)]
+        npv = prospect[("npv", Variables.Valuations.Scenario.MINIMUM)]
+        return super().__new__(cls, *args, apy=apy, npv=npv, **kwargs)
+
+    @staticmethod
+    def formatter(value, pre="", post=""):
+        if value < 10 ** 3: return f"{pre}{value:.0f}{post}"
+        elif value < 10 ** 6: return f"{pre}{value:.0f}K{post}"
+        elif value < 10 ** 9: return f"{pre}{value:.0f}M{post}"
+        elif not np.isfinite(value): return "EsV"
+        else: return "InF"
+
+class AlpacaOrder(Naming, fields=["size", "term", "tenure", "limit", "stop"]):
     def __len__(self): return len(self.securities)
+    def __init__(self, *args, securities, valuation, **kwargs):
+        self.securities = list(securities)
+        self.valuation = valuation
 
 
 class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "orders"], headers={"accept": "application/json", "content-type": "application/json"}):
@@ -58,16 +76,15 @@ class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v
         return {"APCA-API-KEY-ID": str(api.identity), "APCA-API-SECRET-KEY": str(api.code)}
 
 
-class AlpacaOrderPayload(WebPayload, key="order", fields={"qty": "1", "order_class": "mleg"}, multiple=False, optional=False):
+class AlpacaOrderPayload(WebPayload, key="order", fields={"order_class": "mleg"}, multiple=False, optional=False):
     limit = lambda order: {"limit_price": f"{order.limit:.02f}"} if order.term in (Variables.Markets.Term.LIMIT, Variables.Markets.Term.STOPLIMIT) else {}
     stop = lambda order: {"stop_price": f"{order.stop:.02f}"} if order.term in (Variables.Markets.Term.STOP, Variables.Markets.Term.STOPLIMIT) else {}
     tenure = lambda order: {"time_in_force": tenure_formatter(order)}
     term = lambda order: {"type": term_formatter(order)}
     size = lambda order: {"qty": str(order.size)}
 
-    class Securities(WebPayload, key="securities", locator="legs", fields={}, multiple=True, optional=True):
-        security = lambda security: {"symbol": security_formatter(security)}
-        quantity = lambda security: {"ratio_qty": quantity_formatter(security)}
+    class Securities(WebPayload, key="securities", locator="legs", fields={"ratio_qty": "1"}, multiple=True, optional=True):
+        option = lambda security: {"symbol": option_formatter(security)}
         action = lambda security: {"side": action_formatter(security)}
 
 
@@ -80,14 +97,12 @@ class AlpacaOrderData(WebJSON, key="order", multiple=False, optional=False):
 
     def execute(self, *args, **kwargs):
         contents = super().execute(*args, **kwargs)
-        stocks = [security for security in contents["securities"] if security.instrument == Variables.Securities.Instrument.STOCK]
-        options = [security for security in contents["securities"] if security.instrument == Variables.Securities.Instrument.OPTION]
-        return AlpacaOrder(security=stocks + options, **contents)
+        securities = contents["securities"]
+        return AlpacaOrder(securities=securities, valuation=None, **contents)
 
     class Securities(WebJSON, key="securities", locator="legs", multiple=True, optional=True):
         class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
         class Expire(WebJSON.Text, key="expire", locator="symbol", parser=expire_parser): pass
-        class Instrument(WebJSON.Text, key="instrument", locator="symbol", parser=instrument_parser): pass
         class Option(WebJSON.Text, key="option", locator="symbol", parser=option_parser): pass
         class Position(WebJSON.Text, key="position", locator="side", parser=position_parser): pass
         class Strike(WebJSON.Text, key="strike", locator="symbol", parser=strike_parser): pass
@@ -96,8 +111,10 @@ class AlpacaOrderData(WebJSON, key="order", multiple=False, optional=False):
 
         def execute(self, *args, **kwargs):
             contents = super().execute(*args, **kwargs)
+            contents = dict(contents) | dict(instrument=Variables.Securities.Instrument.OPTION)
+            settlement = Querys.Settlement(list(map(contents.get, list(Querys.Settlement))))
             security = Securities(list(map(contents.get, list(Variables.Securities.Security))))
-            return AlpacaSecurity(security=security, **contents)
+            return AlpacaSecurity(settlement=settlement, security=security, strike=contents["strike"])
 
 
 class AlpacaOrderPage(WebJSONPage):
@@ -120,11 +137,9 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
         for settlement, order in self.orders(prospects, *args, **kwargs):
-            order = self.upload(order, *args, **kwargs)
-            spot = - np.round(order.spot, 2).astype(np.float32)
-            self.console(f"{str(settlement)}[{len(order):.0f}]")
-            cashflow = "expense" if bool(spot <= 0) else "revenue"
-            self.console(f"${abs(spot):.2f} {cashflow}", title="Cashflow")
+            self.upload(order, *args, **kwargs)
+            securities = ", ".join(list(map(str, order.securities)))
+            self.console(f"{str(securities)}[{str(order.valuation)}, {order.size:.0f}]")
 
     def upload(self, order, *args, **kwargs):
         order = self.page(*args, order=order, **kwargs)
@@ -134,16 +149,17 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
     @staticmethod
     def orders(prospects, *args, term, tenure, **kwargs):
         assert term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
-        header = ["strategy", "spot", "size"] + list(Querys.Settlement) + list(map(str, Securities.Options))
-        orders = prospects.loc[:, prospects.columns.get_level_values(0).isin(set(header))].droplevel(1, axis=1)
-        for index, order in orders.iterrows():
-            order = order.dropna(inplace=False)
+        header = ["strategy", "valuation"] + list(Querys.Settlement) + list(map(str, Securities.Options)) + ["spot", "size"]
+        for index, prospect in prospects.iterrows():
+            order = prospect[header].droplevel(1)
+            settlement = Querys.Settlement(order[list(Querys.Settlement)].to_dict())
+            securities = order[list(map(str, Securities.Options))].to_dict()
+            securities = {Securities[security]: strike for security, strike in securities.items() if not np.isnan(strike)}
             price = - np.round(order.spot, 2).astype(np.float32)
-            settlement = Querys.Settlement([order.ticker, order.expire])
-            function = lambda security: dict(instrument=security.instrument, option=security.option, position=security.position)
-            stocks = [AlpacaSecurity(ticker=order.ticker, **function(security)) for security in order.strategy.stocks]
-            options = [AlpacaSecurity(ticker=order.ticker, expire=order.expire, strike=order[str(security)], **function(security)) for security in order.strategy.options]
-            order = AlpacaOrder(limit=price, stop=None, term=term, tenure=tenure, size=order.size, securities=stocks + options)
+            size = + np.round(order.size, 0).astype(np.int32)
+            valuation = AlpacaValuation[order.valuation](prospect)
+            securities = [AlpacaSecurity(settlement=settlement, security=security, strike=strike) for security, strike in securities.items()]
+            order = AlpacaOrder(size=size, limit=price, stop=None, term=term, tenure=tenure, securities=securities, valuation=valuation)
             yield settlement, order
 
     @property
