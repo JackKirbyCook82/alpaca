@@ -68,6 +68,7 @@ class AlpacaPortfolioDownloader(Logging, Partition, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaPortfolioPage(*args, **kwargs)
+        self.__header = ["quantity", "entry"]
 
     def execute(self, *args, **kwargs):
         portfolio = self.download(*args, **kwargs)
@@ -82,26 +83,26 @@ class AlpacaPortfolioDownloader(Logging, Partition, title="Downloaded"):
         portfolio = self.page(*args, **kwargs)
         return portfolio
 
-    @staticmethod
-    def stocks(portfolio, *args, **kwargs):
+    def stocks(self, portfolio, *args, **kwargs):
         mask = portfolio["option"].isin([Variables.Securities.Option.EMPTY])
         dataframe = portfolio.where(mask).dropna(how="all", inplace=False)
         function = lambda series: Querys.Symbol(series.to_dict())
         dataframe[str(Querys.Symbol)] = dataframe[list(Querys.Symbol)].apply(function, axis=1)
         dataframe = dataframe.set_index(str(Querys.Symbol), drop=True, inplace=False)
-        securities = dataframe[["quantity"]].to_dict("index")
+        securities = dataframe[list(self.header)].to_dict("index")
         return securities
 
-    @staticmethod
-    def options(portfolio, *args, **kwargs):
+    def options(self, portfolio, *args, **kwargs):
         mask = portfolio["option"].isin([Variables.Securities.Option.PUT, Variables.Securities.Option.CALL])
         dataframe = portfolio.where(mask).dropna(how="all", inplace=False)
         function = lambda series: Querys.Contract(series.to_dict())
         dataframe[str(Querys.Contract)] = dataframe[list(Querys.Contract)].apply(function, axis=1)
         dataframe = dataframe.set_index(str(Querys.Contract), drop=True, inplace=False)
-        securities = dataframe[["quantity"]].to_dict("index")
+        securities = dataframe[list(self.header)].to_dict("index")
         return securities
 
+    @property
+    def header(self): return self.__header
     @property
     def page(self): return self.__page
 
