@@ -177,18 +177,21 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, trade=AlpacaStockTradePage
     def execute(self, symbols, *args, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
-        parameters = dict(tickers=[str(symbol.ticker) for symbol in symbols], query=Querys.Symbol)
-        stocks = self.download(*args, **parameters, **kwargs)
-        assert isinstance(stocks, pd.DataFrame)
-        if isinstance(symbols, dict):
-            function = lambda series: symbols[Querys.Symbol(series.to_dict())]
-            values = stocks[list(Querys.Symbol)].apply(function, axis=1, result_type="expand")
-            stocks = pd.concat([stocks, values], axis=1)
-        for query, stock in self.partition(stocks, by=Querys.Symbol):
-            size = self.size(stock)
-            self.console(f"{str(query)}[{int(size):.0f}]")
-            if self.empty(stock): return
-            yield stock
+        symbols = [symbols[index:index+100] for index in range(0, len(symbols), 100)]
+        for symbols in iter(symbols):
+            parameters = dict(tickers=[str(symbol.ticker) for symbol in symbols], query=Querys.Symbol)
+            stocks = self.download(*args, **parameters, **kwargs)
+            assert isinstance(stocks, pd.DataFrame)
+            if isinstance(symbols, dict):
+                function = lambda series: symbols[Querys.Symbol(series.to_dict())]
+                values = stocks[list(Querys.Symbol)].apply(function, axis=1, result_type="expand")
+                stocks = pd.concat([stocks, values], axis=1)
+            symbols = self.groups(stocks, by=Querys.Symbol)
+            symbols = ",".join(list(map(str, symbols)))
+            size = self.size(stocks)
+            self.console(f"{str(symbols)}[{int(size):.0f}]")
+            if self.empty(stocks): continue
+            yield stocks
 
 
 class AlpacaOptionDownloader(AlpacaSecurityDownloader, trade=AlpacaOptionTradePage, quote=AlpacaOptionQuotePage):
@@ -204,11 +207,12 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, trade=AlpacaOptionTradePa
                 function = lambda series: contracts[Querys.Contract(series.to_dict())]
                 values = options[list(Querys.Contract)].apply(function, axis=1, result_type="expand")
                 options = pd.concat([options, values], axis=1)
-            for settlement, dataframe in self.partition(options, by=Querys.Settlement):
-                size = self.size(dataframe)
-                self.console(f"{str(settlement)}[{int(size):.0f}]")
-                if self.empty(dataframe): continue
-                yield dataframe
+            settlements = self.groups(options, by=Querys.Settlement)
+            settlements = ",".join(list(map(str, settlements)))
+            size = self.size(options)
+            self.console(f"{str(settlements)}[{int(size):.0f}]")
+            if self.empty(options): continue
+            yield options
 
 
 class AlpacaContractDownloader(Logging, title="Downloaded"):

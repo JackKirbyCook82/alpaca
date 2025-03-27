@@ -12,7 +12,7 @@ from finance.variables import Variables, Querys, OSI
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
-from support.mixins import Partition, Logging
+from support.mixins import Sizing, Emptying, Partition, Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -64,7 +64,7 @@ class AlpacaPortfolioPage(WebJSONPage):
         return dataframe
 
 
-class AlpacaPortfolioDownloader(Logging, Partition, title="Downloaded"):
+class AlpacaPortfolioDownloader(Partition, Logging, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaPortfolioPage(*args, **kwargs)
@@ -72,11 +72,12 @@ class AlpacaPortfolioDownloader(Logging, Partition, title="Downloaded"):
 
     def execute(self, *args, **kwargs):
         portfolio = self.download(*args, **kwargs)
-        for settlement, dataframe in self.partition(portfolio, by=Querys.Settlement):
-            size = dataframe["quantity"].apply(np.abs).sum()
-            self.console(f"{str(settlement)}[{int(size):.0f}]")
+        settlements = self.groups(portfolio, by=Querys.Settlement)
+        settlements = ",".join(list(map(str, settlements)))
         self.stocks(portfolio, *args, **kwargs)
         options = self.options(portfolio, *args, **kwargs)
+        self.console(f"{str(settlements)}[{len(options):.0f}]")
+        if not bool(options): return
         yield options
 
     def download(self, *args, **kwargs):

@@ -91,7 +91,7 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
     def execute(self, prospects, *args, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
-        for settlement, order in self.orders(prospects, *args, **kwargs):
+        for order in self.orders(prospects, *args, **kwargs):
             self.upload(order, *args, **kwargs)
             securities = ", ".join(list(map(str, order.securities)))
             self.console(f"{str(securities)}[{str(order.valuation)}, {order.size:.0f}]")
@@ -114,7 +114,7 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
             valuation = AlpacaValuation[series.valuation](prospect)
             securities = [AlpacaSecurity(settlement=settlement, security=security, strike=strike) for security, strike in securities.items()]
             order = AlpacaOrder(size=size, limit=price, stop=None, term=term, tenure=tenure, securities=securities, valuation=valuation)
-            yield settlement, order
+            yield order
 
     @property
     def page(self): return self.__page
