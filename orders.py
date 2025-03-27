@@ -49,6 +49,7 @@ class AlpacaArbitrage(AlpacaValuation, fields=["apy", "npv"], register=Variables
         elif not np.isfinite(value): return "EsV"
         else: return "InF"
 
+
 class AlpacaOrder(Naming, fields=["size", "term", "tenure", "limit", "stop"]):
     def __len__(self): return len(self.securities)
     def __init__(self, *args, securities, valuation, **kwargs):
@@ -105,15 +106,15 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
         assert term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
         header = ["strategy", "valuation"] + list(Querys.Settlement) + list(map(str, Securities.Options)) + ["spot", "size"]
         for index, prospect in prospects.iterrows():
+            limit = - np.round(prospect[("spot", "")] - prospect[("npv", Variables.Valuations.Scenario.MINIMUM)], 2).astype(np.float32)
             series = prospect[header].droplevel(1)
             settlement = Querys.Settlement(series[list(Querys.Settlement)].to_dict())
             securities = series[list(map(str, Securities.Options))].to_dict()
             securities = {Securities[security]: strike for security, strike in securities.items() if not np.isnan(strike)}
-            price = - np.round(series["spot"], 2).astype(np.float32)
             size = + np.round(series["size"], 1).astype(np.int32)
             valuation = AlpacaValuation[series.valuation](prospect)
             securities = [AlpacaSecurity(settlement=settlement, security=security, strike=strike) for security, strike in securities.items()]
-            order = AlpacaOrder(size=size, limit=price, stop=None, term=term, tenure=tenure, securities=securities, valuation=valuation)
+            order = AlpacaOrder(size=size, limit=limit, stop=None, term=term, tenure=tenure, securities=securities, valuation=valuation)
             yield order
 
     @property
