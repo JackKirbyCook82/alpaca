@@ -43,11 +43,12 @@ class AlpacaArbitrage(AlpacaValuation, fields=["apy", "npv"], register=Variables
 
     @staticmethod
     def formatter(value, prefix):
-        if value < 10 ** 3: return f"{prefix}{value / (10 ** 3):.0f}"
-        elif value < 10 ** 6: return f"{prefix}{value / (10 ** 6):.0f}K"
-        elif value < 10 ** 9: return f"{prefix}{value / (10 ** 9):.0f}M"
-        elif not np.isfinite(value): return "EsV"
-        else: return "InF"
+        if not np.isfinite(value): return "InF"
+        elif value > 10 ** 12: return "EsV"
+        elif value > 10 ** 9: return f"{prefix}{value / (10 ** 9):.2f}B"
+        elif value > 10 ** 6: return f"{prefix}{value / (10 ** 6):.2f}M"
+        elif value > 10 ** 3: return f"{prefix}{value / (10 ** 3):.2f}K"
+        else: return f"{prefix}{value:.2f}"
 
 
 class AlpacaOrder(Naming, fields=["size", "term", "tenure", "limit", "stop"]):
@@ -81,6 +82,11 @@ class AlpacaOrderPage(WebJSONPage):
         assert isinstance(order, AlpacaOrder)
         url = AlpacaOrderURL(*args, **kwargs)
         payload = AlpacaOrderPayload(order, *args, **kwargs)
+
+        print(url)
+        print(payload)
+        raise Exception()
+
         self.load(url, *args, payload=dict(payload), **kwargs)
 
 
@@ -89,10 +95,10 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaOrderPage(*args, **kwargs)
 
-    def execute(self, prospects, *args, **kwargs):
-        assert isinstance(prospects, pd.DataFrame)
-        if self.empty(prospects): return
-        for order in self.orders(prospects, *args, **kwargs):
+    def execute(self, orders, *args, **kwargs):
+        assert isinstance(orders, pd.DataFrame)
+        if self.empty(orders): return
+        for order in self.orders(orders, *args, **kwargs):
             self.upload(order, *args, **kwargs)
             securities = ", ".join(list(map(str, order.securities)))
             self.console(f"{str(securities)}[{str(order.valuation)}, {order.size:.0f}]")
@@ -102,20 +108,19 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
         self.page(*args, order=order, **kwargs)
 
     @staticmethod
-    def orders(prospects, *args, term, tenure, **kwargs):
+    def orders(orders, *args, term, tenure, **kwargs):
         assert term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
         header = ["strategy", "valuation"] + list(Querys.Settlement) + list(map(str, Securities.Options)) + ["spot", "size"]
-        for index, prospect in prospects.iterrows():
-            limit = - np.round(prospect[("spot", "")] - prospect[("npv", Variables.Valuations.Scenario.MINIMUM)], 2).astype(np.float32)
-            series = prospect[header].droplevel(1)
+        for index, order in orders.iterrows():
+            limit = - np.round(order[("spot", "")] - order[("npv", Variables.Valuations.Scenario.MINIMUM)], 2).astype(np.float32)
+            series = order[header].droplevel(1)
             settlement = Querys.Settlement(series[list(Querys.Settlement)].to_dict())
             securities = series[list(map(str, Securities.Options))].to_dict()
             securities = {Securities[security]: strike for security, strike in securities.items() if not np.isnan(strike)}
             size = + np.round(series["size"], 1).astype(np.int32)
-            valuation = AlpacaValuation[series.valuation](prospect)
+            valuation = AlpacaValuation[series.valuation](order)
             securities = [AlpacaSecurity(settlement=settlement, security=security, strike=strike) for security, strike in securities.items()]
-            order = AlpacaOrder(size=size, limit=limit, stop=None, term=term, tenure=tenure, securities=securities, valuation=valuation)
-            yield order
+            yield AlpacaOrder(size=size, limit=limit, stop=None, term=term, tenure=tenure, securities=securities, valuation=valuation)
 
     @property
     def page(self): return self.__page

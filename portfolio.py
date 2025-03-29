@@ -5,6 +5,7 @@ Created on Sat Mar 15 2025
 @author: Jack Kirby Cook
 
 """
+
 import numpy as np
 import pandas as pd
 
@@ -12,7 +13,7 @@ from finance.variables import Variables, Querys, OSI
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
-from support.mixins import Sizing, Emptying, Partition, Logging
+from support.mixins import Partition, Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"

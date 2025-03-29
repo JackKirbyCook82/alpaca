@@ -73,8 +73,6 @@ class AlpacaContractURL(AlpacaMarketURL, domain="https://paper-api.alpaca.market
     @staticmethod
     def expires(*args, expires=None, **kwargs): return {"expiration_date_gte": str(expires.minimum.strftime("%Y-%m-%d")), "expiration_date_lte": str(expires.maximum.strftime("%Y-%m-%d"))} if bool(expires) else {}
     @staticmethod
-    def strikes(*args, strikes=None, **kwargs): return {"strike_price_gte": min(strikes), "strike_price_lte": max(strikes)} if bool(strikes) else {}
-    @staticmethod
     def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if bool(pagination) else {}
 
 
@@ -149,6 +147,7 @@ class AlpacaSecurityDownloader(Sizing, Emptying, Partition, Logging, ABC, title=
         trade = self.pages.trade(*args, **kwargs)
         quote = self.pages.quote(*args, **kwargs)
         assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
+        assert not self.empty(trade) and not self.empty(quote)
         header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
         average = lambda cols: np.round((cols["ask"] + cols["bid"]) / 2, 2)
         missing = lambda cols: np.isnan(cols["price"])
@@ -224,14 +223,14 @@ class AlpacaContractDownloader(Logging, title="Downloaded"):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
         for symbol in iter(symbols):
-            contracts = self.download(*args, ticker=symbol.ticker, **kwargs)
+            parameters = dict(ticker=str(symbol.ticker))
+            contracts = self.download(*args, **parameters, **kwargs)
             self.console(f"{str(symbol)}[{len(contracts):.0f}]")
             if not bool(contracts): continue
             yield contracts
 
-    def download(self, *args, ticker, expires, **kwargs):
-        parameters = dict(ticker=ticker, expires=expires)
-        contracts = self.page(*args, **parameters, **kwargs)
+    def download(self, *args, **kwargs):
+        contracts = self.page(*args, **kwargs)
         assert isinstance(contracts, list)
         contracts.sort(key=lambda contract: contract.expire)
         return contracts
