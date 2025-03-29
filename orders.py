@@ -43,7 +43,8 @@ class AlpacaArbitrage(AlpacaValuation, fields=["apy", "npv"], register=Variables
 
     @staticmethod
     def formatter(value, prefix):
-        if not np.isfinite(value): return "InF"
+        if np.isnan(value): return "NaN"
+        elif not np.isfinite(value): return "InF"
         elif value > 10 ** 12: return "EsV"
         elif value > 10 ** 9: return f"{prefix}{value / (10 ** 9):.2f}B"
         elif value > 10 ** 6: return f"{prefix}{value / (10 ** 6):.2f}M"

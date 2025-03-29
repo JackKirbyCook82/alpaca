@@ -71,7 +71,7 @@ class AlpacaContractURL(AlpacaMarketURL, domain="https://paper-api.alpaca.market
     @staticmethod
     def tickers(*args, ticker, **kwargs): return {"underlying_symbols": str(ticker)}
     @staticmethod
-    def expires(*args, expires=None, **kwargs): return {"expiration_date_gte": str(expires.minimum.strftime("%Y-%m-%d")), "expiration_date_lte": str(expires.maximum.strftime("%Y-%m-%d"))} if bool(expires) else {}
+    def expires(*args, expiry=None, **kwargs): return {"expiration_date_gte": str(expiry.minimum.strftime("%Y-%m-%d")), "expiration_date_lte": str(expiry.maximum.strftime("%Y-%m-%d"))} if bool(expiry) else {}
     @staticmethod
     def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if bool(pagination) else {}
 
