@@ -147,7 +147,7 @@ class AlpacaSecurityDownloader(Sizing, Emptying, Partition, Logging, ABC, title=
         trade = self.pages.trade(*args, **kwargs)
         quote = self.pages.quote(*args, **kwargs)
         assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
-        assert not self.empty(trade) and not self.empty(quote)
+        if self.empty(trade) or self.empty(quote): return pd.DataFrame()
         header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
         average = lambda cols: np.round((cols["ask"] + cols["bid"]) / 2, 2)
         missing = lambda cols: np.isnan(cols["price"])
@@ -181,6 +181,7 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, trade=AlpacaStockTradePage
             parameters = dict(tickers=[str(symbol.ticker) for symbol in symbols], query=Querys.Symbol)
             stocks = self.download(*args, **parameters, **kwargs)
             assert isinstance(stocks, pd.DataFrame)
+            if self.empty(stocks): continue
             if isinstance(symbols, dict):
                 function = lambda series: symbols[Querys.Symbol(series.to_dict())]
                 values = stocks[list(Querys.Symbol)].apply(function, axis=1, result_type="expand")
@@ -202,6 +203,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, trade=AlpacaOptionTradePa
             parameters = dict(osis=list(map(OSI, contracts)), query=Querys.Contract)
             options = self.download(*args, **parameters, **kwargs)
             assert isinstance(options, pd.DataFrame)
+            if self.empty(options): continue
             if isinstance(contracts, dict):
                 function = lambda series: contracts[Querys.Contract(series.to_dict())]
                 values = options[list(Querys.Contract)].apply(function, axis=1, result_type="expand")

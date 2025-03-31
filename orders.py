@@ -83,11 +83,6 @@ class AlpacaOrderPage(WebJSONPage):
         assert isinstance(order, AlpacaOrder)
         url = AlpacaOrderURL(*args, **kwargs)
         payload = AlpacaOrderPayload(order, *args, **kwargs)
-
-        print(url)
-        print(payload)
-        raise Exception()
-
         self.load(url, *args, payload=dict(payload), **kwargs)
 
 
