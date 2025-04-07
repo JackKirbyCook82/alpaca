@@ -91,10 +91,10 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaOrderPage(*args, **kwargs)
 
-    def execute(self, orders, *args, **kwargs):
-        assert isinstance(orders, pd.DataFrame)
-        if self.empty(orders): return
-        for order in self.orders(orders, *args, **kwargs):
+    def execute(self, prospects, *args, **kwargs):
+        assert isinstance(prospects, pd.DataFrame)
+        if self.empty(prospects): return
+        for order in self.orders(prospects, *args, **kwargs):
             self.upload(order, *args, **kwargs)
             securities = ", ".join(list(map(str, order.securities)))
             self.console(f"{str(securities)}[{str(order.valuation)}, {order.size:.0f}]")
@@ -104,17 +104,17 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
         self.page(*args, order=order, **kwargs)
 
     @staticmethod
-    def orders(orders, *args, term, tenure, **kwargs):
+    def orders(prospects, *args, term, tenure, **kwargs):
         assert term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
         header = ["strategy", "valuation"] + list(Querys.Settlement) + list(map(str, Securities.Options)) + ["spot", "size"]
-        for index, order in orders.iterrows():
-            limit = - np.round(order[("spot", "")] - order[("npv", Variables.Valuations.Scenario.MINIMUM)], 2).astype(np.float32)
-            series = order[header].droplevel(1)
+        for index, prospect in prospects.iterrows():
+            limit = - np.round(prospect[("spot", "")] - prospect[("npv", Variables.Valuations.Scenario.MINIMUM)], 2).astype(np.float32)
+            series = prospect[header].droplevel(1)
             settlement = Querys.Settlement(series[list(Querys.Settlement)].to_dict())
             securities = series[list(map(str, Securities.Options))].to_dict()
             securities = {Securities[security]: strike for security, strike in securities.items() if not np.isnan(strike)}
             size = + np.round(series["size"], 1).astype(np.int32)
-            valuation = AlpacaValuation[series.valuation](order)
+            valuation = AlpacaValuation[series.valuation](prospect)
             securities = [AlpacaSecurity(settlement=settlement, security=security, strike=strike) for security, strike in securities.items()]
             yield AlpacaOrder(size=size, limit=limit, stop=None, term=term, tenure=tenure, securities=securities, valuation=valuation)
 
