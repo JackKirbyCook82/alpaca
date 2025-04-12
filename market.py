@@ -28,11 +28,11 @@ __license__ = "MIT License"
 
 price_parsers = {code: (key, lambda value: np.float32(value)) for key, code in {"price": "p", "ask": "ap", "bid": "bp"}.items()}
 size_parsers = {code: (key, lambda value: np.int32(value)) for key, code in {"supply": "as", "demand": "bs"}.items()}
-contents_parsers = price_parsers | size_parsers
+market_parsers = price_parsers | size_parsers
 
-contents_parser = lambda contents: {key: function(contents[code]) for code, (key, function) in contents_parsers.items() if code in contents.keys()}
-stock_parser = lambda mapping: [{"ticker": ticker} | contents_parser(contents) for ticker, contents in mapping.items()]
-option_parser = lambda mapping: [dict(OSI(osi)) | contents_parser(contents) for osi, contents in mapping.items()]
+market_parser = lambda mapping: {key: function(mapping[code]) for code, (key, function) in market_parsers.items() if code in mapping.keys()}
+stock_parser = lambda mapping: [{"ticker": ticker} | market_parser(content) for ticker, content in mapping.items()]
+option_parser = lambda mapping: [dict(OSI(osi)) | market_parser(content) for osi, content in mapping.items()]
 expire_parser = lambda string: Datetime.strptime(string, "%Y-%m-%d").date()
 strike_parser = lambda content: np.round(float(content), 2)
 
