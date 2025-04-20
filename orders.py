@@ -60,7 +60,7 @@ class AlpacaOrderMeta(RegistryMeta, ABCMeta):
         instance = super(AlpacaOrderMeta, cls[strategy]).__call__(*args, **parameters, **kwargs)
         return instance
 
-class AlpacaOrder(Naming, ABC, fields=["size", "term", "tenure", "limit", "stop", "stocks", "options"], metaclass=AlpacaOrderMeta):
+class AlpacaOrder(Naming, ABC, fields=["size", "term", "tenure", "limit", "stop", "quantity", "stocks", "options"], metaclass=AlpacaOrderMeta):
     def __new__(cls, *args, spot, breakeven, quantity, **kwargs):
         assert breakeven <= spot and quantity >= 1
         limit = - np.round(breakeven, 2).astype(np.float32)
