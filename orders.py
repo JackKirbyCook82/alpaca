@@ -94,13 +94,19 @@ class AlpacaOrderPage(WebJSONPage):
     def execute(self, *args, order, **kwargs):
         url = AlpacaOrderURL(*args, **kwargs)
         payload = AlpacaOrderPayload(order, *args, **kwargs)
+
+        print(url)
+        print(payload)
+        raise Exception()
+
         self.load(url, *args, payload=dict(payload), **kwargs)
 
 
 class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, api, **kwargs):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaOrderPage(*args, **kwargs)
+        self.__api = api
 
     def execute(self, prospects, *args, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
@@ -112,7 +118,8 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
 
     def upload(self, order, *args, **kwargs):
         assert order.term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
-        self.page(*args, order=order, **kwargs)
+        parameters = dict(order=order, api=self.api)
+        self.page(*args, **parameters, **kwargs)
 
     @staticmethod
     def calculator(prospects, *args, term, tenure, **kwargs):
@@ -130,7 +137,8 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
 
     @property
     def page(self): return self.__page
-
+    @property
+    def api(self): return self.__api
 
 
 

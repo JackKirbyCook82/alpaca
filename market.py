@@ -136,12 +136,13 @@ class AlpacaSecurityDownloader(Sizing, Emptying, Partition, Logging, ABC, title=
         cls.__trade__ = kwargs.get("trade", getattr(cls, "__trade__", None))
         cls.__quote__ = kwargs.get("quote", getattr(cls, "__quote__", None))
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, api, **kwargs):
         super().__init__(*args, **kwargs)
         Technicals = ntuple("Pages", "trade, quote")
         trade = self.trade(*args, **kwargs)
         quote = self.quote(*args, **kwargs)
         self.__pages = Technicals(trade, quote)
+        self.__api = api
 
     def download(self, *args, query, **kwargs):
         trade = self.pages.trade(*args, **kwargs)
@@ -170,6 +171,8 @@ class AlpacaSecurityDownloader(Sizing, Emptying, Partition, Logging, ABC, title=
     def quote(self): return type(self).__quote__
     @property
     def pages(self): return self.__pages
+    @property
+    def api(self): return self.__api
 
 
 class AlpacaStockDownloader(AlpacaSecurityDownloader, trade=AlpacaStockTradePage, quote=AlpacaStockQuotePage):
@@ -178,7 +181,7 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, trade=AlpacaStockTradePage
         if not bool(symbols): return
         symbols = [symbols[index:index+100] for index in range(0, len(symbols), 100)]
         for symbols in iter(symbols):
-            parameters = dict(tickers=[str(symbol.ticker) for symbol in symbols], query=Querys.Symbol)
+            parameters = dict(tickers=[str(symbol.ticker) for symbol in symbols], query=Querys.Symbol, api=self.api)
             stocks = self.download(*args, **parameters, **kwargs)
             assert isinstance(stocks, pd.DataFrame)
             if self.empty(stocks): continue
@@ -200,7 +203,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, trade=AlpacaOptionTradePa
         if not bool(contracts): return
         contracts = [contracts[index:index+100] for index in range(0, len(contracts), 100)]
         for contracts in iter(contracts):
-            parameters = dict(osis=list(map(OSI, contracts)), query=Querys.Contract)
+            parameters = dict(osis=list(map(OSI, contracts)), query=Querys.Contract, api=self.api)
             options = self.download(*args, **parameters, **kwargs)
             assert isinstance(options, pd.DataFrame)
             if self.empty(options): continue
@@ -217,15 +220,16 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, trade=AlpacaOptionTradePa
 
 
 class AlpacaContractDownloader(Logging, title="Downloaded"):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, api, **kwargs):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaContractPage(*args, **kwargs)
+        self.__api = api
 
     def execute(self, symbols, *args, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
         for symbol in iter(symbols):
-            parameters = dict(ticker=str(symbol.ticker))
+            parameters = dict(ticker=str(symbol.ticker), api=self.api)
             contracts = self.download(*args, **parameters, **kwargs)
             self.console(f"{str(symbol)}[{len(contracts):.0f}]")
             if not bool(contracts): continue
@@ -246,6 +250,8 @@ class AlpacaContractDownloader(Logging, title="Downloaded"):
 
     @property
     def page(self): return self.__page
+    @property
+    def api(self): return self.__api
 
 
 

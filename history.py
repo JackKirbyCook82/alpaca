@@ -63,15 +63,16 @@ class AlpacaHistoryPage(WebJSONPage):
 
 
 class AlpacaBarsDownloader(Sizing, Emptying, Partition, Logging, title="Downloaded"):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, api, **kwargs):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaHistoryPage(*args, **kwargs)
+        self.__api = api
 
     def execute(self, symbols, *args, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
         for symbol in iter(symbols):
-            parameters = dict(ticker=str(symbol.ticker))
+            parameters = dict(ticker=str(symbol.ticker), api=self.api)
             bars = self.download(*args, **parameters, **kwargs)
             assert isinstance(bars, pd.DataFrame)
             if isinstance(symbols, dict):
@@ -99,5 +100,7 @@ class AlpacaBarsDownloader(Sizing, Emptying, Partition, Logging, title="Download
 
     @property
     def page(self): return self.__page
+    @property
+    def api(self): return self.__api
 
 
