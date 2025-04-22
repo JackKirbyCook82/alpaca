@@ -94,11 +94,6 @@ class AlpacaOrderPage(WebJSONPage):
     def execute(self, *args, order, **kwargs):
         url = AlpacaOrderURL(*args, **kwargs)
         payload = AlpacaOrderPayload(order, *args, **kwargs)
-
-        print(url)
-        print(payload)
-        raise Exception()
-
         self.load(url, *args, payload=dict(payload), **kwargs)
 
 
