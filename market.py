@@ -189,7 +189,7 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, trade=AlpacaStockTradePage
                 function = lambda series: symbols[Querys.Symbol(series.to_dict())]
                 values = stocks[list(Querys.Symbol)].apply(function, axis=1, result_type="expand")
                 stocks = pd.concat([stocks, values], axis=1)
-            symbols = self.groups(stocks, by=Querys.Symbol)
+            symbols = self.keys(stocks, by=Querys.Symbol)
             symbols = ",".join(list(map(str, symbols)))
             size = self.size(stocks)
             self.console(f"{str(symbols)}[{int(size):.0f}]")
@@ -211,7 +211,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, trade=AlpacaOptionTradePa
                 function = lambda series: contracts[Querys.Contract(series.to_dict())]
                 values = options[list(Querys.Contract)].apply(function, axis=1, result_type="expand")
                 options = pd.concat([options, values], axis=1)
-            settlements = self.groups(options, by=Querys.Settlement)
+            settlements = self.keys(options, by=Querys.Settlement)
             settlements = ",".join(list(map(str, settlements)))
             size = self.size(options)
             self.console(f"{str(settlements)}[{int(size):.0f}]")
