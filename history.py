@@ -26,7 +26,7 @@ __license__ = "MIT License"
 
 
 date_parser = lambda value: Datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=Timezone.utc).date()
-price_parsers = {code: (key, lambda value: np.float32(value)) for key, code in {"open": "o", "close": "c", "high": "h", "low": "l", "price": "vw"}.items()}
+price_parsers = {code: (key, lambda value: np.float32(value)) for key, code in {"open": "o", "close": "c", "high": "h", "low": "l", "adjusted": "vw"}.items()}
 size_parsers = {code: (key, lambda value: np.int64(value)) for key, code in {"volume": "v"}.items()}
 date_parsers = {code: (key, lambda value: date_parser(value)) for key, code in {"date": "t"}.items()}
 bars_parser = lambda mapping: {key: function(mapping[code]) for code, (key, function) in (price_parsers | size_parsers | date_parsers).items() if code in mapping.keys()}

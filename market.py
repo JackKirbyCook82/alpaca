@@ -26,7 +26,7 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-price_parsers = {code: (key, lambda value: np.float32(value)) for key, code in {"price": "p", "ask": "ap", "bid": "bp"}.items()}
+price_parsers = {code: (key, lambda value: np.float32(value)) for key, code in {"last": "p", "ask": "ap", "bid": "bp"}.items()}
 size_parsers = {code: (key, lambda value: np.int32(value)) for key, code in {"supply": "as", "demand": "bs"}.items()}
 market_parsers = price_parsers | size_parsers
 
@@ -151,9 +151,9 @@ class AlpacaSecurityDownloader(Sizing, Emptying, Partition, Logging, ABC, title=
         if self.empty(trade) or self.empty(quote): return pd.DataFrame()
         header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
         average = lambda cols: np.round((cols["ask"] + cols["bid"]) / 2, 2)
-        missing = lambda cols: np.isnan(cols["price"])
+        missing = lambda cols: np.isnan(cols["last"])
         dataframe = quote.merge(trade, how="outer", on=list(query), sort=False, suffixes=("", "_"))[header]
-        dataframe["price"] = dataframe.apply(lambda cols: average(cols) if missing(cols) else cols["price"], axis=1)
+        dataframe["last"] = dataframe.apply(lambda cols: average(cols) if missing(cols) else cols["last"], axis=1)
         return dataframe
 
     @staticmethod
