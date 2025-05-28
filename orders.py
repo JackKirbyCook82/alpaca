@@ -29,14 +29,7 @@ tenure_formatter = lambda order: {Variables.Markets.Tenure.DAY: "day", Variables
 term_formatter = lambda order: {Variables.Markets.Term.MARKET: "market", Variables.Markets.Term.LIMIT: "limit"}[order.term]
 
 
-class AlpacaValuationMeta(RegistryMeta, ABCMeta):
-    def __call__(cls, prospect, *args, **kwargs):
-        valuation = prospect[("valuation", "")]
-        instance = super(AlpacaValuationMeta, cls[valuation]).__call__(prospect, *args, **kwargs)
-        return instance
-
-class AlpacaValuation(Naming, ABC, metaclass=AlpacaValuationMeta): pass
-class ArbitrageValuation(AlpacaValuation, fields=["npv"], register=Variables.Valuations.Valuation.ARBITRAGE):
+class AlpacaValuation(Naming, fields=["npv"]):
     def __str__(self): return "|".join([f"${value:.0f}" for value in self.npv.values()])
     def __new__(cls, prospect, *args, **kwargs):
         npv = prospect.xs("npv", axis=0, level=0, drop_level=True)
@@ -106,6 +99,10 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
     def execute(self, prospects, *args, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
+
+        print(prospects)
+        raise Exception()
+
         for order, valuation in self.calculator(prospects, *args, **kwargs):
             self.upload(order, *args, **kwargs)
             securities = ", ".join(list(map(str, order.securities)))
