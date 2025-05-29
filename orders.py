@@ -30,7 +30,7 @@ term_formatter = lambda order: {Variables.Markets.Term.MARKET: "market", Variabl
 
 
 class AlpacaValuation(Naming, fields=["npv"]):
-    def __str__(self): return "|".join([f"${value:.0f}" for value in self.npv.values()])
+    def __str__(self): return f"${self.npv.min():.0f} -> ${self.npv.max():.0f}"
     def __new__(cls, prospect, *args, **kwargs):
         npv = prospect.xs("npv", axis=0, level=0, drop_level=True)
         return super().__new__(cls, *args, npv=npv, **kwargs)
@@ -99,14 +99,10 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
     def execute(self, prospects, *args, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
-
-        print(prospects)
-        raise Exception()
-
         for order, valuation in self.calculator(prospects, *args, **kwargs):
             self.upload(order, *args, **kwargs)
-            securities = ", ".join(list(map(str, order.securities)))
-            self.console(f"{str(securities)}|{str(order.valuation)}[{order.quantity:.0f}]")
+            securities = ", ".join(list(map(str, order.options + order.stocks)))
+            self.console(f"{str(securities)}[{order.quantity:.0f}] @ {str(valuation)}")
 
     def upload(self, order, *args, **kwargs):
         assert order.term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
