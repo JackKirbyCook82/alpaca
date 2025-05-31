@@ -76,7 +76,7 @@ class AlpacaOrderPayload(WebPayload, key="order", fields={"order_class": "mleg"}
     stop = lambda order: {"stop_price": f"{order.stop:.02f}"} if order.term in (Variables.Markets.Term.STOP, Variables.Markets.Term.STOPLIMIT) else {}
     tenure = lambda order: {"time_in_force": tenure_formatter(order)}
     term = lambda order: {"type": term_formatter(order)}
-    size = lambda order: {"qty": str(order.quantity)}
+    quantity = lambda order: {"qty": str(order.quantity)}
 
     class Options(WebPayload, key="options", locator="legs", fields={"ratio_qty": "1"}, multiple=True, optional=True):
         option = lambda security: {"symbol": option_formatter(security)}
