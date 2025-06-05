@@ -80,12 +80,26 @@ class AlpacaMarketData(WebJSON.Mapping, multiple=False, optional=False):
     def execute(self, *args, **kwargs):
         contents = super().execute(*args, **kwargs)
         assert isinstance(contents, list)
-        return pd.DataFrame.from_records(contents)
+        dataframe = pd.DataFrame.from_records(contents)
+        return dataframe
 
-class AlpacaStockTradeData(AlpacaMarketData, key="trade", locator="//trades", parser=stock_parser): pass
-class AlpacaStockQuoteData(AlpacaMarketData, key="quote", locator="//quotes", parser=stock_parser): pass
-class AlpacaOptionTradeData(AlpacaMarketData, key="trade", locator="//trades", parser=option_parser): pass
-class AlpacaOptionQuoteData(AlpacaMarketData, key="quote", locator="//quotes", parser=option_parser): pass
+class AlpacaStockData(AlpacaMarketData):
+    def execute(self, *args, **kwargs):
+        dataframe = super().execute(*args, **kwargs)
+        dataframe["instrument"] = Variables.Securities.Instrument.STOCK
+        dataframe["option"] = Variables.Securities.Option.EMPTY
+        return dataframe
+
+class AlpacaOptionData(AlpacaMarketData):
+    def execute(self, *args, **kwargs):
+        dataframe = super().execute(*args, **kwargs)
+        dataframe["instrument"] = Variables.Securities.Instrument.OPTION
+        return dataframe
+
+class AlpacaStockTradeData(AlpacaStockData, key="trade", locator="//trades", parser=stock_parser): pass
+class AlpacaStockQuoteData(AlpacaStockData, key="quote", locator="//quotes", parser=stock_parser): pass
+class AlpacaOptionTradeData(AlpacaOptionData, key="trade", locator="//trades", parser=option_parser): pass
+class AlpacaOptionQuoteData(AlpacaOptionData, key="quote", locator="//quotes", parser=option_parser): pass
 
 class AlpacaContractData(WebJSON, multiple=False, optional=False):
     class Pagination(WebJSON.Text, key="pagination", locator="next_page_token", parser=str, multiple=False, optional=True): pass

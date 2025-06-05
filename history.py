@@ -42,7 +42,7 @@ class AlpacaBarsURL(AlpacaHistoryURL, domain="https://data.alpaca.markets", path
     @staticmethod
     def path(*args, ticker, **kwargs): return [str(ticker), "bars"]
     @staticmethod
-    def parameters(*args, dates, **kwargs): return {"start": dates.minimum.strftime("%Y-%m-%d"), "end": dates.maximum.strftime("%Y-%m-%d")}
+    def parameters(*args, history, **kwargs): return {"start": history.minimum.strftime("%Y-%m-%d"), "end": history.maximum.strftime("%Y-%m-%d")}
 
 
 class AlpacaHistoryData(WebJSON, multiple=False, optional=False):
