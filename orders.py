@@ -68,8 +68,8 @@ class AlpacaOrderPayload(WebPayload, key="order", fields={"order_class": "mleg"}
 
 
 class AlpacaOrderPage(WebJSONPage):
-    def execute(self, *args, order, **kwargs):
-        url = AlpacaOrderURL(*args, **kwargs)
+    def execute(self, *args, api, order, **kwargs):
+        url = AlpacaOrderURL(*args, api=api, **kwargs)
         payload = AlpacaOrderPayload(order, *args, **kwargs)
         self.load(url, *args, payload=payload.json, **kwargs)
 
