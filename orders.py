@@ -33,11 +33,11 @@ class AlpacaSecurity(Naming, ABC, fields=["ticker", "instrument", "option", "pos
         security = dict(instrument=security.instrument, option=security.option, position=security.position)
         return super().__new__(cls, *args, **security, **kwargs)
 
-class AlpacaStock(AlpacaSecurity):
-    def __str__(self): return str(self.ticker)
-
 class AlpacaOption(AlpacaSecurity, fields=["expire", "strike"]):
     def __str__(self): return str(OSI([self.ticker, self.expire, self.option, self.strike]))
+
+class AlpacaStock(AlpacaSecurity):
+    def __str__(self): return str(self.ticker)
 
 class AlpacaValuation(Naming, fields=["npv"]):
     def __str__(self): return f"${self.npv.min():.0f} -> ${self.npv.max():.0f}"
@@ -71,12 +71,7 @@ class AlpacaOrderPage(WebJSONPage):
     def execute(self, *args, order, **kwargs):
         url = AlpacaOrderURL(*args, **kwargs)
         payload = AlpacaOrderPayload(order, *args, **kwargs)
-
-        print(url)
-        print(payload)
-        return
-
-        self.load(url, *args, payload=dict(payload), **kwargs)
+        self.load(url, *args, payload=payload.json, **kwargs)
 
 
 class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
@@ -88,15 +83,10 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
     def execute(self, prospects, *args, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
-
-        print(prospects)
-
         for order, valuation in self.calculator(prospects, *args, **kwargs):
             self.upload(order, *args, **kwargs)
             securities = ", ".join(list(map(str, order.securities)))
             self.console(f"{str(securities)}[{order.quantity:.0f}] @ {str(valuation)}")
-
-        raise Exception()
 
     def upload(self, order, *args, **kwargs):
         assert order.term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
