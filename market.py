@@ -137,7 +137,7 @@ class AlpacaContractPage(WebJSONPage):
     def execute(self, *args, pagination=None, **kwargs):
         url = AlpacaContractURL(*args, pagination=pagination, **kwargs)
         self.load(url, *args, **kwargs)
-        datas = AlpacaContractData(self.json, *args, **kwargs)
+        datas = AlpacaContractData(self.json, *args, delayer=self.delayer, **kwargs)
         contents = [data(*args, **kwargs) for data in datas["contracts"]]
         pagination = datas["pagination"](*args, **kwargs)
         if not bool(pagination): return list(contents)
