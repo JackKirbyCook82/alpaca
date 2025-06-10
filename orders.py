@@ -50,9 +50,9 @@ class VerticalCallOrder(AlpacaOrder, register=Strategies.Verticals.Call): pass
 
 class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "orders"], headers={"accept": "application/json", "content-type": "application/json"}):
     @staticmethod
-    def headers(*args, api, **kwargs):
-        assert isinstance(api, tuple)
-        return {"APCA-API-KEY-ID": str(api.identity), "APCA-API-SECRET-KEY": str(api.code)}
+    def headers(*args, webapi, **kwargs):
+        assert isinstance(webapi, tuple)
+        return {"APCA-API-KEY-ID": str(webapi.identity), "APCA-API-SECRET-KEY": str(webapi.code)}
 
 
 class AlpacaOrderPayload(WebPayload, key="order", fields={"order_class": "mleg"}, multiple=False, optional=False):
@@ -68,22 +68,17 @@ class AlpacaOrderPayload(WebPayload, key="order", fields={"order_class": "mleg"}
 
 
 class AlpacaOrderPage(WebJSONPage):
-    def __init__(self, *args, api, **kwargs):
+    def __init__(self, *args, webapi, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__api = api
+        self.__webapi = webapi
 
     def execute(self, *args, order, **kwargs):
-        url = AlpacaOrderURL(*args, api=self.api, **kwargs)
+        url = AlpacaOrderURL(*args, webapi=self.webapi, **kwargs)
         payload = AlpacaOrderPayload(order, *args, **kwargs)
-
-        print(url)
-        print(payload)
-        raise Exception()
-
         self.load(url, *args, payload=payload.json, **kwargs)
 
     @property
-    def api(self): return self.__api
+    def webapi(self): return self.__webapi
 
 
 class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
@@ -111,14 +106,15 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
             settlement = prospect[list(Querys.Settlement)].droplevel(1).to_dict()
             options = prospect[list(map(str, Securities.Options))].droplevel(1).to_dict()
             options = {Securities.Options[option]: strike for option, strike in options.items() if not np.isnan(strike)}
-            stocks = {Securities.Stocks[stock] for stock in strategy.stocks}
+            stocks = {Securities.Stocks(stock) for stock in strategy.stocks}
             breakeven = prospect[("spot", Variables.Scenario.BREAKEVEN)]
             current = prospect[("spot", Variables.Scenario.CURRENT)]
             assert current >= breakeven and quantity >= 1
             options = [AlpacaOption(security, strike=strike, **settlement) for security, strike in options.items()]
             stocks = [AlpacaStock(security, **settlement) for security in stocks]
             valuation = AlpacaValuation(npv=prospect.xs("npv", axis=0, level=0, drop_level=True))
-            order = AlpacaOrder[strategy](securities=stocks + options, term=term, tenure=tenure, limit=-breakeven, stop=None, quantity=1)
+            try: order = AlpacaOrder[strategy](securities=stocks + options, term=term, tenure=tenure, limit=-breakeven, stop=None, quantity=1)
+            except KeyError: continue
             yield order, valuation
 
     @property
