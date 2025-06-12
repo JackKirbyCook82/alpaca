@@ -89,6 +89,10 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
     def execute(self, prospects, *args, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
+
+        print(prospects)
+        raise Exception()
+
         for order, valuation in self.calculator(prospects, *args, **kwargs):
             self.upload(order, *args, **kwargs)
             securities = ", ".join(list(map(str, order.securities)))
