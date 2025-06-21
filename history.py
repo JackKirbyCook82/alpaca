@@ -34,9 +34,9 @@ bars_parser = lambda mapping: {key: function(mapping[code]) for code, (key, func
 
 class AlpacaHistoryURL(WebURL, headers={"accept": "application/json"}):
     @staticmethod
-    def headers(*args, api, **kwargs):
-        assert isinstance(api, tuple)
-        return {"APCA-API-KEY-ID": str(api.identity), "APCA-API-SECRET-KEY": str(api.code)}
+    def headers(*args, webapi, **kwargs):
+        assert isinstance(webapi, tuple)
+        return {"APCA-API-KEY-ID": str(webapi.identity), "APCA-API-SECRET-KEY": str(webapi.code)}
 
 class AlpacaBarsURL(AlpacaHistoryURL, domain="https://data.alpaca.markets", path=["v2", "stocks"], parameters={"timeframe": "1Day", "feed": "sip", "limit": "10000"}):
     @staticmethod
@@ -51,8 +51,12 @@ class AlpacaHistoryData(WebJSON, multiple=False, optional=False):
 
 
 class AlpacaHistoryPage(WebJSONPage):
+    def __init__(self, *args, webapi, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__webapi = webapi
+
     def execute(self, *args, **kwargs):
-        url = AlpacaBarsURL(*args, **kwargs)
+        url = AlpacaBarsURL(*args, webapi=self.webapi, **kwargs)
         self.load(url, *args, **kwargs)
         datas = AlpacaHistoryData(self.json, *args, **kwargs)
         contents = [data(*args, **kwargs) for data in datas["bars"]]
@@ -61,18 +65,20 @@ class AlpacaHistoryPage(WebJSONPage):
         dataframe = dataframe.sort_values("date", axis=0, ascending=True, inplace=False)
         return dataframe
 
+    @property
+    def webapi(self): return self.__webapi
+
 
 class AlpacaBarsDownloader(Sizing, Emptying, Partition, Logging, title="Downloaded"):
-    def __init__(self, *args, api, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaHistoryPage(*args, **kwargs)
-        self.__api = api
 
     def execute(self, symbols, *args, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
         for symbol in iter(symbols):
-            parameters = dict(ticker=str(symbol.ticker), api=self.api)
+            parameters = dict(ticker=str(symbol.ticker))
             bars = self.download(*args, **parameters, **kwargs)
             assert isinstance(bars, pd.DataFrame)
             if isinstance(symbols, dict):
@@ -100,7 +106,5 @@ class AlpacaBarsDownloader(Sizing, Emptying, Partition, Logging, title="Download
 
     @property
     def page(self): return self.__page
-    @property
-    def api(self): return self.__api
 
 
