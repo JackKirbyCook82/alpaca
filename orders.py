@@ -40,7 +40,7 @@ class AlpacaStock(AlpacaSecurity):
     def __str__(self): return str(self.ticker)
 
 class AlpacaValuation(Naming, fields=["npv"]):
-    def __str__(self): return f"${self.npv.min():.0f} -> ${self.npv.max():.0f}"
+    def __str__(self): return f"${self.npv:.0f}"
 
 class AlpacaOrderMeta(RegistryMeta, ABCMeta): pass
 class AlpacaOrder(Naming, ABC, fields=["term", "tenure", "limit", "stop", "quantity", "securities"], metaclass=AlpacaOrderMeta): pass
@@ -89,10 +89,10 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
     def execute(self, prospects, *args, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
-
-        print(prospects)
-        raise Exception()
-
+        if "quantity" not in prospects.columns: prospects["quantity"] = 1
+        if "priority" not in prospects.columns: prospects["priority"] = prospects["npv"]
+        prospects = prospects.sort_values("priority", axis=0, ascending=False, inplace=False, ignore_index=False)
+        prospects = prospects.reset_index(drop=True, inplace=False)
         for order, valuation in self.calculator(prospects, *args, **kwargs):
             self.upload(order, *args, **kwargs)
             securities = ", ".join(list(map(str, order.securities)))
@@ -106,18 +106,17 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
     def calculator(prospects, *args, term, tenure, **kwargs):
         assert term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
         for index, prospect in prospects.iterrows():
-            strategy, quantity = prospect[["strategy", "quantity"]].droplevel(1).values
-            settlement = prospect[list(Querys.Settlement)].droplevel(1).to_dict()
-            options = prospect[list(map(str, Securities.Options))].droplevel(1).to_dict()
+            strategy, quantity = prospect[["strategy", "quantity"]].values
+            spot, breakeven = prospect[["spot", "breakeven"]].values
+            settlement = prospect[list(Querys.Settlement)].to_dict()
+            options = prospect[list(map(str, Securities.Options))].to_dict()
             options = {Securities.Options[option]: strike for option, strike in options.items() if not np.isnan(strike)}
             stocks = {Securities.Stocks(stock) for stock in strategy.stocks}
-            breakeven = prospect[("spot", Variables.Scenario.BREAKEVEN)]
-            current = prospect[("spot", Variables.Scenario.CURRENT)]
-            assert current >= breakeven and quantity >= 1
+            assert spot >= breakeven and quantity >= 1
             options = [AlpacaOption(security, strike=strike, **settlement) for security, strike in options.items()]
             stocks = [AlpacaStock(security, **settlement) for security in stocks]
-            valuation = AlpacaValuation(npv=prospect.xs("npv", axis=0, level=0, drop_level=True))
-            try: order = AlpacaOrder[strategy](securities=stocks + options, term=term, tenure=tenure, limit=-breakeven, stop=None, quantity=1)
+            valuation = AlpacaValuation(npv=prospect["npv"])
+            try: order = AlpacaOrder[strategy](securities=stocks + options, term=term, tenure=tenure, limit=-breakeven, stop=None, quantity=quantity)
             except KeyError: continue
             yield order, valuation
 
