@@ -82,9 +82,10 @@ class AlpacaOrderPage(WebJSONPage):
 
 
 class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, source, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__page = AlpacaOrderPage(*args, **kwargs)
+        page = AlpacaOrderPage(*args, source=source, **kwargs)
+        self.__page = page
 
     def execute(self, prospects, *args, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
