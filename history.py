@@ -11,7 +11,7 @@ import pandas as pd
 from datetime import timezone as Timezone
 from datetime import datetime as Datetime
 
-from finance.variables import Querys
+from finance.concepts import Querys
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL

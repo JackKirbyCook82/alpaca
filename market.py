@@ -12,7 +12,7 @@ from abc import ABC
 from datetime import datetime as Datetime
 from collections import namedtuple as ntuple
 
-from finance.variables import Variables, Querys, OSI
+from finance.concepts import Concepts, Querys, OSI
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
@@ -86,14 +86,14 @@ class AlpacaMarketData(WebJSON.Mapping, multiple=False, optional=False):
 class AlpacaStockData(AlpacaMarketData):
     def execute(self, *args, **kwargs):
         dataframe = super().execute(*args, **kwargs)
-        dataframe["instrument"] = Variables.Securities.Instrument.STOCK
-        dataframe["option"] = Variables.Securities.Option.EMPTY
+        dataframe["instrument"] = Concepts.Securities.Instrument.STOCK
+        dataframe["option"] = Concepts.Securities.Option.EMPTY
         return dataframe
 
 class AlpacaOptionData(AlpacaMarketData):
     def execute(self, *args, **kwargs):
         dataframe = super().execute(*args, **kwargs)
-        dataframe["instrument"] = Variables.Securities.Instrument.OPTION
+        dataframe["instrument"] = Concepts.Securities.Instrument.OPTION
         return dataframe
 
 class AlpacaStockTradeData(AlpacaStockData, key="trade", locator="//trades", parser=stock_parser): pass
@@ -106,7 +106,7 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
     class Contracts(WebJSON, key="contracts", locator="option_contracts", parser=Querys.Contract, multiple=True, optional=True):
         class Ticker(WebJSON.Text, key="ticker", locator="underlying_symbol", parser=str): pass
         class Expire(WebJSON.Text, key="expire", locator="expiration_date", parser=expire_parser): pass
-        class Option(WebJSON.Text, key="option", locator="type", parser=Variables.Securities.Option): pass
+        class Option(WebJSON.Text, key="option", locator="type", parser=Concepts.Securities.Option): pass
         class Strike(WebJSON.Text, key="strike", locator="strike_price", parser=strike_parser): pass
 
 

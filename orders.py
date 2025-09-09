@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from abc import ABC, ABCMeta
 
-from finance.variables import Querys, Variables, Securities, Strategies, OSI
+from finance.concepts import Querys, Concepts, Securities, Strategies, OSI
 from webscraping.weburl import WebURL, WebPayload
 from webscraping.webpages import WebJSONPage
 from support.mixins import Emptying, Logging, Naming
@@ -23,9 +23,9 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-action_formatter = lambda security: {Variables.Securities.Position.LONG: "buy", Variables.Securities.Position.SHORT: "sell"}[security.position]
-tenure_formatter = lambda order: {Variables.Markets.Tenure.DAY: "day", Variables.Markets.Tenure.FILLKILL: "fok"}[order.tenure]
-term_formatter = lambda order: {Variables.Markets.Term.MARKET: "market", Variables.Markets.Term.LIMIT: "limit"}[order.term]
+action_formatter = lambda security: {Concepts.Securities.Position.LONG: "buy", Concepts.Securities.Position.SHORT: "sell"}[security.position]
+tenure_formatter = lambda order: {Concepts.Markets.Tenure.DAY: "day", Concepts.Markets.Tenure.FILLKILL: "fok"}[order.tenure]
+term_formatter = lambda order: {Concepts.Markets.Term.MARKET: "market", Concepts.Markets.Term.LIMIT: "limit"}[order.term]
 
 
 class AlpacaSecurity(Naming, ABC, fields=["ticker", "instrument", "option", "position"]):
@@ -56,8 +56,8 @@ class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v
 
 
 class AlpacaOrderPayload(WebPayload, key="order", fields={"order_class": "mleg"}, multiple=False, optional=False):
-    limit = lambda order: {"limit_price": f"{order.limit:.02f}"} if order.term in (Variables.Markets.Term.LIMIT, Variables.Markets.Term.STOPLIMIT) else {}
-    stop = lambda order: {"stop_price": f"{order.stop:.02f}"} if order.term in (Variables.Markets.Term.STOP, Variables.Markets.Term.STOPLIMIT) else {}
+    limit = lambda order: {"limit_price": f"{order.limit:.02f}"} if order.term in (Concepts.Markets.Term.LIMIT, Concepts.Markets.Term.STOPLIMIT) else {}
+    stop = lambda order: {"stop_price": f"{order.stop:.02f}"} if order.term in (Concepts.Markets.Term.STOP, Concepts.Markets.Term.STOPLIMIT) else {}
     tenure = lambda order: {"time_in_force": tenure_formatter(order)}
     term = lambda order: {"type": term_formatter(order)}
     quantity = lambda order: {"qty": str(order.quantity)}
@@ -100,12 +100,12 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
             self.console(f"{str(securities)}[{order.quantity:.0f}] @ {str(valuation)}")
 
     def upload(self, order, *args, **kwargs):
-        assert order.term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
+        assert order.term in (Concepts.Markets.Term.MARKET, Concepts.Markets.Term.LIMIT)
         self.page(*args, order=order, **kwargs)
 
     @staticmethod
     def calculator(prospects, *args, term, tenure, **kwargs):
-        assert term in (Variables.Markets.Term.MARKET, Variables.Markets.Term.LIMIT)
+        assert term in (Concepts.Markets.Term.MARKET, Concepts.Markets.Term.LIMIT)
         for index, prospect in prospects.iterrows():
             strategy, quantity = prospect[["strategy", "quantity"]].values
             spot, breakeven = prospect[["spot", "breakeven"]].values
