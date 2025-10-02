@@ -90,6 +90,10 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
     def execute(self, prospects, *args, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
+
+        print(prospects)
+        return
+
         if "quantity" not in prospects.columns: prospects["quantity"] = 1
         if "priority" not in prospects.columns: prospects["priority"] = prospects["npv"]
         prospects = prospects.sort_values("priority", axis=0, ascending=False, inplace=False, ignore_index=False)
