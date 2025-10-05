@@ -17,6 +17,7 @@ from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 from support.mixins import Emptying, Sizing, Partition, Logging
 from support.custom import SliceOrderedDict as SODict
+from support.decorators import Signature
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -74,6 +75,7 @@ class AlpacaBarsDownloader(Sizing, Emptying, Partition, Logging, title="Download
         super().__init__(*args, **kwargs)
         self.__page = AlpacaHistoryPage(*args, **kwargs)
 
+    @Signature("symbols->bars")
     def execute(self, symbols, *args, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return

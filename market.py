@@ -18,6 +18,7 @@ from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 from support.mixins import Emptying, Sizing, Partition, Logging
 from support.custom import SliceOrderedDict as SODict
+from support.decorators import Signature
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -195,6 +196,7 @@ class AlpacaSecurityDownloader(Sizing, Emptying, Partition, Logging, ABC, title=
 
 
 class AlpacaStockDownloader(AlpacaSecurityDownloader, trade=AlpacaStockTradePage, quote=AlpacaStockQuotePage):
+    @Signature("symbols->stocks")
     def execute(self, symbols, *args, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
@@ -217,6 +219,7 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, trade=AlpacaStockTradePage
 
 
 class AlpacaOptionDownloader(AlpacaSecurityDownloader, trade=AlpacaOptionTradePage, quote=AlpacaOptionQuotePage):
+    @Signature("contracts->options")
     def execute(self, contracts, *args, **kwargs):
         contracts = self.querys(contracts, Querys.Contract)
         if not bool(contracts): return
@@ -243,6 +246,7 @@ class AlpacaContractDownloader(Logging, title="Downloaded"):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaContractPage(*args, **kwargs)
 
+    @Signature("symbols->contracts")
     def execute(self, symbols, *args, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return

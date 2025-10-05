@@ -14,6 +14,7 @@ from finance.concepts import Querys, Concepts, Securities, Strategies, OSI
 from webscraping.weburl import WebURL, WebPayload
 from webscraping.webpages import WebJSONPage
 from support.mixins import Emptying, Logging, Naming
+from support.decorators import Signature
 from support.meta import RegistryMeta
 
 __version__ = "1.0.0"
@@ -87,6 +88,7 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
         page = AlpacaOrderPage(*args, source=source, **kwargs)
         self.__page = page
 
+    @Signature("prospects->")
     def execute(self, prospects, *args, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
