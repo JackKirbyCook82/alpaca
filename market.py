@@ -18,7 +18,6 @@ from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 from support.mixins import Emptying, Sizing, Partition, Logging
 from support.custom import SliceOrderedDict as SODict
-from support.decorators import Signature
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -196,14 +195,13 @@ class AlpacaSecurityDownloader(Sizing, Emptying, Partition, Logging, ABC, title=
 
 
 class AlpacaStockDownloader(AlpacaSecurityDownloader, trade=AlpacaStockTradePage, quote=AlpacaStockQuotePage):
-    @Signature("symbols->stocks")
-    def execute(self, symbols, *args, **kwargs):
+    def execute(self, symbols, /, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
         symbols = [symbols[index:index+100] for index in range(0, len(symbols), 100)]
         for symbols in iter(symbols):
             parameters = dict(tickers=[str(symbol.ticker) for symbol in symbols], query=Querys.Symbol)
-            stocks = self.download(*args, **parameters, **kwargs)
+            stocks = self.download(**parameters, **kwargs)
             assert isinstance(stocks, pd.DataFrame)
             if self.empty(stocks): continue
             if isinstance(symbols, dict):
@@ -219,14 +217,13 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, trade=AlpacaStockTradePage
 
 
 class AlpacaOptionDownloader(AlpacaSecurityDownloader, trade=AlpacaOptionTradePage, quote=AlpacaOptionQuotePage):
-    @Signature("contracts->options")
-    def execute(self, contracts, *args, **kwargs):
+    def execute(self, contracts, /, **kwargs):
         contracts = self.querys(contracts, Querys.Contract)
         if not bool(contracts): return
         contracts = [contracts[index:index+100] for index in range(0, len(contracts), 100)]
         for contracts in iter(contracts):
             parameters = dict(osis=list(map(OSI, contracts)), query=Querys.Contract)
-            options = self.download(*args, **parameters, **kwargs)
+            options = self.download(**parameters, **kwargs)
             assert isinstance(options, pd.DataFrame)
             if self.empty(options): continue
             if isinstance(contracts, dict):
@@ -246,13 +243,12 @@ class AlpacaContractDownloader(Logging, title="Downloaded"):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaContractPage(*args, **kwargs)
 
-    @Signature("symbols->contracts")
-    def execute(self, symbols, *args, **kwargs):
+    def execute(self, symbols, /, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
         for symbol in iter(symbols):
             parameters = dict(ticker=str(symbol.ticker))
-            contracts = self.download(*args, **parameters, **kwargs)
+            contracts = self.download(**parameters, **kwargs)
             self.console(f"{str(symbol)}[{len(contracts):.0f}]")
             if not bool(contracts): continue
             yield contracts

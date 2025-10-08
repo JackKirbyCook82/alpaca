@@ -14,7 +14,6 @@ from finance.concepts import Querys, Concepts, Securities, Strategies, OSI
 from webscraping.weburl import WebURL, WebPayload
 from webscraping.webpages import WebJSONPage
 from support.mixins import Emptying, Logging, Naming
-from support.decorators import Signature
 from support.meta import RegistryMeta
 
 __version__ = "1.0.0"
@@ -88,8 +87,7 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
         page = AlpacaOrderPage(*args, source=source, **kwargs)
         self.__page = page
 
-    @Signature("prospects->")
-    def execute(self, prospects, *args, **kwargs):
+    def execute(self, prospects, /, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
 
@@ -100,8 +98,8 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
         if "priority" not in prospects.columns: prospects["priority"] = prospects["npv"]
         prospects = prospects.sort_values("priority", axis=0, ascending=False, inplace=False, ignore_index=False)
         prospects = prospects.reset_index(drop=True, inplace=False)
-        for order, valuation in self.calculator(prospects, *args, **kwargs):
-            self.upload(order, *args, **kwargs)
+        for order, valuation in self.calculator(prospects, **kwargs):
+            self.upload(order, **kwargs)
             securities = ", ".join(list(map(str, order.securities)))
             self.console(f"{str(securities)}[{order.quantity:.0f}] @ {str(valuation)}")
 
