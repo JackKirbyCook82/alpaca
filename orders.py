@@ -90,14 +90,6 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
     def execute(self, prospects, /, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
-
-        print(prospects)
-        return
-
-        if "quantity" not in prospects.columns: prospects["quantity"] = 1
-        if "priority" not in prospects.columns: prospects["priority"] = prospects["npv"]
-        prospects = prospects.sort_values("priority", axis=0, ascending=False, inplace=False, ignore_index=False)
-        prospects = prospects.reset_index(drop=True, inplace=False)
         for order, valuation in self.calculator(prospects, **kwargs):
             self.upload(order, **kwargs)
             securities = ", ".join(list(map(str, order.securities)))
@@ -118,6 +110,7 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
             options = {Securities.Options[option]: strike for option, strike in options.items() if not np.isnan(strike)}
             stocks = {Securities.Stocks(stock) for stock in strategy.stocks}
             assert spot >= breakeven and quantity >= 1
+
             options = [AlpacaOption(security, strike=strike, **settlement) for security, strike in options.items()]
             stocks = [AlpacaStock(security, **settlement) for security in stocks]
             valuation = AlpacaValuation(npv=prospect["npv"])
