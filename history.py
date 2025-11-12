@@ -90,8 +90,8 @@ class AlpacaBarsDownloader(Sizing, Emptying, Partition, Logging, title="Download
             if self.empty(bars): continue
             yield bars
 
-    def download(self, *args, **kwargs):
-        bars = self.page(*args, **kwargs)
+    def download(self, /, **kwargs):
+        bars = self.page(**kwargs)
         assert isinstance(bars, pd.DataFrame)
         return bars
 

@@ -165,9 +165,9 @@ class AlpacaSecurityDownloader(Sizing, Emptying, Partition, Logging, ABC, title=
         quote = self.quote(*args, **kwargs)
         self.__pages = Technicals(trade, quote)
 
-    def download(self, *args, query, **kwargs):
-        trade = self.pages.trade(*args, **kwargs)
-        quote = self.pages.quote(*args, **kwargs)
+    def download(self, /, query, **kwargs):
+        trade = self.pages.trade(**kwargs)
+        quote = self.pages.quote(**kwargs)
         assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
         if self.empty(trade) or self.empty(quote): return pd.DataFrame()
         header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
@@ -253,8 +253,8 @@ class AlpacaContractDownloader(Logging, title="Downloaded"):
             if not bool(contracts): continue
             yield contracts
 
-    def download(self, *args, **kwargs):
-        contracts = self.page(*args, **kwargs)
+    def download(self, /, **kwargs):
+        contracts = self.page(**kwargs)
         assert isinstance(contracts, list)
         contracts.sort(key=lambda contract: contract.expire)
         return contracts

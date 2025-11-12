@@ -90,17 +90,21 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
     def execute(self, prospects, /, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
+
+        print(prospects)
+        raise Exception()
+
         for order, valuation in self.calculator(prospects, **kwargs):
             self.upload(order, **kwargs)
             securities = ", ".join(list(map(str, order.securities)))
             self.console(f"{str(securities)}[{order.quantity:.0f}] @ {str(valuation)}")
 
-    def upload(self, order, *args, **kwargs):
+    def upload(self, order, /, **kwargs):
         assert order.term in (Concepts.Markets.Term.MARKET, Concepts.Markets.Term.LIMIT)
-        self.page(*args, order=order, **kwargs)
+        self.page(order=order, **kwargs)
 
     @staticmethod
-    def calculator(prospects, *args, term, tenure, **kwargs):
+    def calculator(prospects, /, term, tenure, **kwargs):
         assert term in (Concepts.Markets.Term.MARKET, Concepts.Markets.Term.LIMIT)
         for index, prospect in prospects.iterrows():
             strategy, quantity = prospect[["strategy", "quantity"]].values
@@ -110,7 +114,6 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
             options = {Securities.Options[option]: strike for option, strike in options.items() if not np.isnan(strike)}
             stocks = {Securities.Stocks(stock) for stock in strategy.stocks}
             assert spot >= breakeven and quantity >= 1
-
             options = [AlpacaOption(security, strike=strike, **settlement) for security, strike in options.items()]
             stocks = [AlpacaStock(security, **settlement) for security in stocks]
             valuation = AlpacaValuation(npv=prospect["npv"])
