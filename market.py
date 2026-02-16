@@ -26,10 +26,8 @@ __copyright__ = "Copyright 2023, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-price_parsers = {code: (key, lambda value: np.float32(value)) for key, code in {"last": "p", "ask": "ap", "bid": "bp"}.items()}
-size_parsers = {code: (key, lambda value: np.int32(value)) for key, code in {"supply": "as", "demand": "bs"}.items()}
-market_parsers = price_parsers | size_parsers
-
+market_fields = dict(last=("p", np.float32), ask=("ap", np.float32), bid=("dp", np.float32), supply=("as", np.int32), demand=("bs", np.int32))
+market_parsers = {code: (key, lambda value: function(value)) for key, (code, function) in market_fields.items()}
 market_parser = lambda mapping: {key: function(mapping[code]) for code, (key, function) in market_parsers.items() if code in mapping.keys()}
 stock_parser = lambda mapping: [{"ticker": ticker} | market_parser(content) for ticker, content in mapping.items()]
 option_parser = lambda mapping: [dict(OSI(osi)) | market_parser(content) for osi, content in mapping.items()]
@@ -43,17 +41,13 @@ class AlpacaMarketURL(WebURL, headers={"accept": "application/json"}):
         assert isinstance(webapi, tuple)
         return {"APCA-API-KEY-ID": str(webapi.identity), "APCA-API-SECRET-KEY": str(webapi.code)}
 
-class AlpacaStockURL(AlpacaMarketURL, domain="https://data.alpaca.markets", path=["v2", "stocks"], parameters={"feed": "delayed_sip"}):
     @staticmethod
-    def parameters(*args, tickers, **kwargs):
-        assert isinstance(tickers, list)
-        return {"symbols": ",".join(list(map(str, tickers)))}
+    def parameters(*args, products, **kwargs):
+        assert isinstance(products, list)
+        return {"symbols": ",".join(list(map(str, products)))}
 
-class AlpacaOptionURL(AlpacaMarketURL, domain="https://data.alpaca.markets", path=["v1beta1", "options"], parameters={"feed": "indicative"}):
-    @staticmethod
-    def parameters(*args, osis, **kwargs):
-        assert isinstance(osis, list)
-        return {"symbols": ",".join(list(map(str, osis)))}
+class AlpacaStockURL(AlpacaMarketURL, domain="https://data.alpaca.markets", path=["v2", "stocks"], parameters={"feed": "delayed_sip"}): pass
+class AlpacaOptionURL(AlpacaMarketURL, domain="https://data.alpaca.markets", path=["v1beta1", "options"], parameters={"feed": "indicative"}): pass
 
 class AlpacaStockTradeURL(AlpacaStockURL, path=["trades", "latest"]): pass
 class AlpacaStockQuoteURL(AlpacaStockURL, path=["quotes", "latest"]): pass
@@ -200,7 +194,7 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, trade=AlpacaStockTradePage
         if not bool(symbols): return
         symbols = [symbols[index:index+100] for index in range(0, len(symbols), 100)]
         for symbols in iter(symbols):
-            parameters = dict(tickers=[str(symbol.ticker) for symbol in symbols], query=Querys.Symbol)
+            parameters = dict(products=[str(symbol.ticker) for symbol in symbols], query=Querys.Symbol)
             stocks = self.download(**parameters, **kwargs)
             assert isinstance(stocks, pd.DataFrame)
             if self.empty(stocks): continue
@@ -222,7 +216,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, trade=AlpacaOptionTradePa
         if not bool(contracts): return
         contracts = [contracts[index:index+100] for index in range(0, len(contracts), 100)]
         for contracts in iter(contracts):
-            parameters = dict(osis=list(map(OSI, contracts)), query=Querys.Contract)
+            parameters = dict(products=list(map(OSI, contracts)), query=Querys.Contract)
             options = self.download(**parameters, **kwargs)
             assert isinstance(options, pd.DataFrame)
             if self.empty(options): continue
