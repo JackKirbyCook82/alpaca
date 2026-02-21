@@ -105,50 +105,57 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
 
 
 class AlpacaStockTradePage(WebJSONPage):
-    def execute(self, *args, webapi, **kwargs):
-        url = AlpacaStockTradeURL(*args, webapi=webapi, **kwargs)
+    def execute(self, *args, symbols, webapi, **kwargs):
+        symbols = [str(symbol) for symbol in symbols]
+        url = AlpacaStockTradeURL(*args, products=symbols, webapi=webapi, **kwargs)
         self.load(url, *args, **kwargs)
         datas = AlpacaStockTradeData(self.json, *args, **kwargs)
         contents = datas(*args, **kwargs)
         return contents
 
 class AlpacaStockQuotePage(WebJSONPage):
-    def execute(self, *args, webapi, **kwargs):
-        url = AlpacaStockQuoteURL(*args, webapi=webapi, **kwargs)
+    def execute(self, *args, symbols, webapi, **kwargs):
+        symbols = [str(symbol) for symbol in symbols]
+        url = AlpacaStockQuoteURL(*args, products=symbols, webapi=webapi, **kwargs)
         self.load(url, *args, **kwargs)
         datas = AlpacaStockQuoteData(self.json, *args, **kwargs)
         contents = datas(*args, **kwargs)
         return contents
 
 class AlpacaOptionTradePage(WebJSONPage):
-    def execute(self, *args, webapi, **kwargs):
-        url = AlpacaOptionTradeURL(*args, webapi=webapi, **kwargs)
+    def execute(self, *args, contracts, webapi, **kwargs):
+        contracts = [str(contract) for contract in contracts]
+        url = AlpacaOptionTradeURL(*args, products=contracts, webapi=webapi, **kwargs)
         self.load(url, *args, **kwargs)
         datas = AlpacaOptionTradeData(self.json, *args, **kwargs)
         contents = datas(*args, **kwargs)
         return contents
 
 class AlpacaOptionQuotePage(WebJSONPage):
-    def execute(self, *args, webapi, **kwargs):
-        url = AlpacaOptionQuoteURL(*args, webapi=webapi, **kwargs)
+    def execute(self, *args, contracts, webapi, **kwargs):
+        contracts = [str(contract) for contract in contracts]
+        url = AlpacaOptionQuoteURL(*args, products=contracts, webapi=webapi, **kwargs)
         self.load(url, *args, **kwargs)
         datas = AlpacaOptionQuoteData(self.json, *args, **kwargs)
         contents = datas(*args, **kwargs)
         return contents
 
-
 class AlpacaContractPage(AlpacaMarketPage):
-    def execute(self, *args, webapi, pagination=None, **kwargs):
-        url = AlpacaContractURL(*args, pagination=pagination, webapi=webapi, **kwargs)
+    def execute(self, *args, symbol, expiry, webapi, pagination=None, **kwargs):
+        url = AlpacaContractURL(*args, ticker=str(symbol.ticker), expiry=expiry, webapi=webapi, pagination=pagination, **kwargs)
         self.load(url, *args, **kwargs)
         datas = AlpacaContractData(self.json, *args, delayer=self.delayer, **kwargs)
         contents = [data(*args, **kwargs) for data in datas["contracts"]]
         pagination = datas["pagination"](*args, **kwargs)
         if not bool(pagination): return list(contents)
-        else: return list(contents) + self.execute(args, pagination=pagination, **kwargs)
+        else: return list(contents) + self.execute(args, ticker=str(symbol.ticker), expiry=expiry, webapi=webapi, pagination=pagination, **kwargs)
 
 
-class AlpacaDownloader(Sizing, Emptying, Partition, Logging, ABC, title="Downloaded"): pass
+class AlpacaDownloader(Sizing, Emptying, Partition, Logging, ABC, title="Downloaded"):
+    def __init__(self, *args, webapi, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.webapi = webapi
+
 class AlpacaSecurityDownloader(AlpacaDownloader, ABC):
     @staticmethod
     def querys(querys, querytype):
@@ -166,8 +173,7 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader):
         if not bool(symbols): return
         symbols = [symbols[index:index+100] for index in range(0, len(symbols), 100)]
         for symbols in iter(symbols):
-            parameters = dict(products=[str(symbol.ticker) for symbol in symbols], query=Querys.Symbol)
-            stocks = self.download(**parameters, **kwargs)
+            stocks = self.download(symbols=symbols, webapi=self.webapi, query=Querys.Symbol, **kwargs)
             assert isinstance(stocks, pd.DataFrame)
             if self.empty(stocks): continue
             if isinstance(symbols, dict):
@@ -200,8 +206,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader):
         if not bool(contracts): return
         contracts = [contracts[index:index+100] for index in range(0, len(contracts), 100)]
         for contracts in iter(contracts):
-            parameters = dict(products=list(map(OSI, contracts)), query=Querys.Contract)
-            options = self.download(**parameters, **kwargs)
+            options = self.download(contracts=contracts, webapi=self.webapi, query=Querys.Contract, **kwargs)
             assert isinstance(options, pd.DataFrame)
             if self.empty(options): continue
             if isinstance(contracts, dict):
@@ -229,12 +234,11 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader):
 
 
 class AlpacaContractDownloader(AlpacaDownloader):
-    def execute(self, symbols, /, **kwargs):
+    def execute(self, symbols, /, expiry=None, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
         for symbol in iter(symbols):
-            parameters = dict(ticker=str(symbol.ticker))
-            contracts = self.download(**parameters, **kwargs)
+            contracts = self.download(symbol=symbol, expiry=expiry, **kwargs)
             self.console(f"{str(symbol)}[{len(contracts):.0f}]")
             if not bool(contracts): continue
             yield contracts
