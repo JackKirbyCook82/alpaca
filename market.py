@@ -41,13 +41,14 @@ class AlpacaMarketURL(WebURL, headers={"accept": "application/json"}):
         assert isinstance(webapi, tuple)
         return {"APCA-API-KEY-ID": str(webapi.identity), "APCA-API-SECRET-KEY": str(webapi.code)}
 
+class AlpacaSecurityURL(AlpacaMarketURL):
     @staticmethod
     def parameters(*args, products, **kwargs):
         assert isinstance(products, list)
         return {"symbols": ",".join(list(map(str, products)))}
 
-class AlpacaStockURL(AlpacaMarketURL, domain="https://data.alpaca.markets", path=["v2", "stocks"], parameters={"feed": "delayed_sip"}): pass
-class AlpacaOptionURL(AlpacaMarketURL, domain="https://data.alpaca.markets", path=["v1beta1", "options"], parameters={"feed": "indicative"}): pass
+class AlpacaStockURL(AlpacaSecurityURL, domain="https://data.alpaca.markets", path=["v2", "stocks"], parameters={"feed": "delayed_sip"}): pass
+class AlpacaOptionURL(AlpacaSecurityURL, domain="https://data.alpaca.markets", path=["v1beta1", "options"], parameters={"feed": "indicative"}): pass
 
 class AlpacaStockTradeURL(AlpacaStockURL, path=["trades", "latest"]): pass
 class AlpacaStockQuoteURL(AlpacaStockURL, path=["quotes", "latest"]): pass
