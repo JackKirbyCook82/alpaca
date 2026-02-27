@@ -50,9 +50,7 @@ class VerticalCallOrder(AlpacaOrder, register=Strategies.Verticals.Call): pass
 
 class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "orders"], headers={"accept": "application/json", "content-type": "application/json"}):
     @staticmethod
-    def headers(*args, webapi, **kwargs):
-        assert isinstance(webapi, tuple)
-        return {"APCA-API-KEY-ID": str(webapi.identity), "APCA-API-SECRET-KEY": str(webapi.code)}
+    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(webapi.identity), "APCA-API-SECRET-KEY": str(webapi.code)}
 
 
 class AlpacaOrderPayload(WebPayload, key="order", fields={"order_class": "mleg"}, multiple=False, optional=False):
@@ -68,24 +66,17 @@ class AlpacaOrderPayload(WebPayload, key="order", fields={"order_class": "mleg"}
 
 
 class AlpacaOrderPage(WebJSONPage):
-    def __init__(self, *args, webapi, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__webapi = webapi
-
     def execute(self, *args, order, **kwargs):
-        url = AlpacaOrderURL(*args, webapi=self.webapi, **kwargs)
+        parameters = dict(authenticator=self.source.authenticator)
+        url = AlpacaOrderURL(*args, **parameters, **kwargs)
         payload = AlpacaOrderPayload(order, *args, **kwargs)
         self.load(url, *args, payload=payload.json, **kwargs)
 
-    @property
-    def webapi(self): return self.__webapi
-
 
 class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
-    def __init__(self, *args, source, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        page = AlpacaOrderPage(*args, source=source, **kwargs)
-        self.__page = page
+        self.page = AlpacaOrderPage(*args, **kwargs)
 
     def execute(self, prospects, /, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
@@ -117,8 +108,6 @@ class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
             except KeyError: continue
             yield order, valuation
 
-    @property
-    def page(self): return self.__page
 
 
 
