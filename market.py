@@ -13,6 +13,7 @@ from datetime import datetime as Datetime
 from collections import namedtuple as ntuple
 
 from finance.concepts import Concepts, Querys, OSI
+from webscraping.websupport import WebDownloader
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
@@ -153,21 +154,10 @@ class AlpacaContractPage(AlpacaMarketPage):
         else: return list(contents) + self.execute(args, pagination=pagination, **parameters, **kwargs)
 
 
-class AlpacaDownloader(Sizing, Emptying, Partition, Logging, ABC, title="Downloaded"):
-    def __init_subclass__(cls, *args, pages, **kwargs):
-        assert isinstance(pages, dict)
-        super().__init_subclass__(*args, **kwargs)
-        cls.Pages = dict(pages)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.pages = {key: value(*args, **kwargs) for key, value in self.Pages.items()}
-
-
-class AlpacaSecurityDownloader(AlpacaDownloader, ABC):
+class AlpacaSecurityDownloader(WebDownloader, ABC):
     def download(self, /, query, **kwargs):
-        trade = self.pages["trade"](**kwargs)
-        quote = self.pages["quote"](**kwargs)
+        trade = self.pages.trade(**kwargs)
+        quote = self.pages.quote(**kwargs)
         assert isinstance(trade, pd.DataFrame) and isinstance(quote, pd.DataFrame)
         if self.empty(trade) or self.empty(quote): return pd.DataFrame()
         header = list(trade.columns) + [column for column in list(quote.columns) if column not in list(trade.columns)]
@@ -176,15 +166,6 @@ class AlpacaSecurityDownloader(AlpacaDownloader, ABC):
         dataframe = quote.merge(trade, how="outer", on=list(query), sort=False, suffixes=("", "_"))[header]
         dataframe["last"] = dataframe.apply(lambda cols: average(cols) if missing(cols) else cols["last"], axis=1)
         return dataframe
-
-    @staticmethod
-    def querys(querys, querytype):
-        assert isinstance(querys, (list, dict, querytype))
-        assert all([isinstance(query, querytype) for query in querys]) if isinstance(querys, (list, dict)) else True
-        if isinstance(querys, querytype): querys = [querys]
-        elif isinstance(querys, dict): querys = SODict(querys)
-        else: querys = list(querys)
-        return querys
 
 
 class AlpacaStockDownloader(AlpacaSecurityDownloader, pages={"trade": AlpacaStockTradePage, "quote": AlpacaStockQuotePage}):
@@ -229,7 +210,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, pages={"trade": AlpacaOpt
             yield options
 
 
-class AlpacaContractDownloader(AlpacaDownloader, pages={"contract": AlpacaContractPage}):
+class AlpacaContractDownloader(WebDownloader, page=AlpacaContractPage):
     def execute(self, symbols, /, expiry=None, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
@@ -240,17 +221,10 @@ class AlpacaContractDownloader(AlpacaDownloader, pages={"contract": AlpacaContra
             yield contracts
 
     def download(self, /, **kwargs):
-        contracts = self.pages["contract"](**kwargs)
+        contracts = self.page(**kwargs)
         assert isinstance(contracts, list)
         contracts.sort(key=lambda contract: contract.expire)
         return contracts
-
-    @staticmethod
-    def querys(querys, querytype):
-        assert isinstance(querys, (list, querytype))
-        assert all([isinstance(query, querytype) for query in querys]) if isinstance(querys, list) else True
-        querys = list(querys) if isinstance(querys, list) else [querys]
-        return querys
 
 
 
