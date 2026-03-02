@@ -147,7 +147,7 @@ class AlpacaContractPage(AlpacaMarketPage):
         parameters = dict(ticker=str(symbol.ticker), expiry=expiry, authenticator=self.source.authenticator)
         url = AlpacaContractURL(*args, pagination=pagination, **parameters, **kwargs)
         self.load(url, *args, **kwargs)
-        datas = AlpacaContractData(self.json, *args, delayer=self.delayer, **kwargs)
+        datas = AlpacaContractData(self.json, *args, **kwargs)
         contents = [data(*args, **kwargs) for data in datas["contracts"]]
         pagination = datas["pagination"](*args, **kwargs)
         if not bool(pagination): return list(contents)
