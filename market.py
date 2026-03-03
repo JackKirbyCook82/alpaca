@@ -17,8 +17,6 @@ from webscraping.websupport import WebDownloader
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
-from support.mixins import Emptying, Sizing, Partition, Logging
-from support.custom import SliceOrderedDict as SODict
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -31,7 +29,7 @@ Field = ntuple("Field", "name code parser")
 market_fields = [Field("last", "p", np.float32), Field("bid", "dp", np.float32), Field("ask", "ap", np.float32), Field("supply", "as", np.float32), Field("demand", "bs", np.float32)]
 market_parser = lambda mapping: {field.name: field.parser(mapping[field.code]) for field in market_fields}
 stocks_parser = lambda contents: [{"ticker": ticker} | market_parser(mapping) for ticker, mapping in contents.items()]
-options_parser = lambda contents: [dict(OSI.parse(osi)) | market_parser(content) for osi, mapping in contents.items()]
+options_parser = lambda contents: [dict(OSI.parse(osi)) | market_parser(contents) for osi, mapping in contents.items()]
 expire_parser = lambda string: Datetime.strptime(string, "%Y-%m-%d").date()
 strike_parser = lambda content: np.round(float(content), 2)
 
@@ -71,7 +69,7 @@ class AlpacaContractURL(AlpacaMarketURL, domain="https://paper-api.alpaca.market
 class AlpacaMarketData(WebJSON.Mapping, multiple=False, optional=False):
     def execute(self, *args, **kwargs):
         contents = super().execute(*args, **kwargs)
-        assert isinstance(contents, list) # <stocks_parser> & <options_parser> return []
+        assert isinstance(contents, list)  # <stocks_parser> & <options_parser> return []
         dataframe = pd.DataFrame.from_records(contents)
         return dataframe
 
@@ -142,7 +140,7 @@ class AlpacaOptionQuotePage(WebJSONPage):
         contents = datas(*args, **kwargs)
         return contents
 
-class AlpacaContractPage(AlpacaMarketPage):
+class AlpacaContractPage(WebJSONPage):
     def execute(self, *args, symbol, expiry, pagination=None, **kwargs):
         parameters = dict(ticker=str(symbol.ticker), expiry=expiry, authenticator=self.source.authenticator)
         url = AlpacaContractURL(*args, pagination=pagination, **parameters, **kwargs)

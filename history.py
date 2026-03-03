@@ -15,8 +15,7 @@ from finance.concepts import Querys
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
-from support.mixins import Emptying, Sizing, Partition, Logging
-from support.custom import SliceOrderedDict as SODict
+from webscraping.websupport import WebDownloader
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -34,9 +33,7 @@ bars_parser = lambda mapping: {key: function(mapping[code]) for code, (key, func
 
 class AlpacaHistoryURL(WebURL, headers={"accept": "application/json"}):
     @staticmethod
-    def headers(*args, webapi, **kwargs):
-        assert isinstance(webapi, tuple)
-        return {"APCA-API-KEY-ID": str(webapi.identity), "APCA-API-SECRET-KEY": str(webapi.code)}
+    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 class AlpacaBarsURL(AlpacaHistoryURL, domain="https://data.alpaca.markets", path=["v2", "stocks"], parameters={"timeframe": "1Day", "feed": "sip", "limit": "10000"}):
     @staticmethod
@@ -69,7 +66,7 @@ class AlpacaHistoryPage(WebJSONPage):
     def webapi(self): return self.__webapi
 
 
-class AlpacaBarsDownloader(Sizing, Emptying, Partition, Logging, title="Downloaded"):
+class AlpacaBarsDownloader(WebDownloader, title="Downloaded"):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__page = AlpacaHistoryPage(*args, **kwargs)
@@ -83,8 +80,8 @@ class AlpacaBarsDownloader(Sizing, Emptying, Partition, Logging, title="Download
             assert isinstance(bars, pd.DataFrame)
             if isinstance(symbols, dict):
                 function = lambda series: symbols[Querys.Symbol(series.to_dict())]
-                values = stocks[list(Querys.Symbol)].apply(function, axis=1, result_type="expand")
-                stocks = pd.concat([stocks, values], axis=1)
+                values = bars[list(Querys.Symbol)].apply(function, axis=1, result_type="expand")
+                bars = pd.concat([bars, values], axis=1)
             size = self.size(bars)
             self.console(f"{str(symbol)}[{int(size):.0f}]")
             if self.empty(bars): continue
@@ -95,16 +92,6 @@ class AlpacaBarsDownloader(Sizing, Emptying, Partition, Logging, title="Download
         assert isinstance(bars, pd.DataFrame)
         return bars
 
-    @staticmethod
-    def querys(querys, querytype):
-        assert isinstance(querys, (list, dict, querytype))
-        assert all([isinstance(query, querytype) for query in querys]) if isinstance(querys, (list, dict)) else True
-        if isinstance(querys, querytype): querys = [querys]
-        elif isinstance(querys, dict): querys = SODict(querys)
-        else: querys = list(querys)
-        return querys
 
-    @property
-    def page(self): return self.__page
 
 
