@@ -88,7 +88,6 @@ class AlpacaOrderUploader(WebUploader, page=AlpacaOrderPage):
 
     @staticmethod
     def calculator(prospects, /, term, tenure, **kwargs):
-        assert term in (Concepts.Markets.Term.MARKET, Concepts.Markets.Term.LIMIT)
         for index, prospect in prospects.iterrows():
             strategy, quantity = prospect[["strategy", "quantity"]].values
             spot, breakeven = prospect[["spot", "breakeven"]].values
