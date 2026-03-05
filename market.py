@@ -13,8 +13,7 @@ from datetime import datetime as Datetime
 from collections import namedtuple as ntuple
 
 from finance.concepts import Concepts, Querys, OSI
-from webscraping.websupport import WebDownloader
-from webscraping.webpages import WebJSONPage
+from webscraping.webpages import WebJSONPage, WebDownloader
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 
@@ -170,7 +169,8 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, pages={"trade": AlpacaStoc
     def execute(self, symbols, /, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
-        symbols = [symbols[index:index+100] for index in range(0, len(symbols), 100)]
+        if bool(self.limit):
+            symbols = [symbols[index:index+self.limit] for index in range(0, len(symbols), self.limit)]
         for symbols in iter(symbols):
             stocks = self.download(symbols=symbols, query=Querys.Symbol, **kwargs)
             assert isinstance(stocks, pd.DataFrame)
@@ -191,7 +191,8 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, pages={"trade": AlpacaOpt
     def execute(self, contracts, /, **kwargs):
         contracts = self.querys(contracts, Querys.Contract)
         if not bool(contracts): return
-        contracts = [contracts[index:index+100] for index in range(0, len(contracts), 100)]
+        if bool(self.limit):
+            contracts = [contracts[index:index+self.limit] for index in range(0, len(contracts), self.limit)]
         for contracts in iter(contracts):
             options = self.download(contracts=contracts, query=Querys.Contract, **kwargs)
             assert isinstance(options, pd.DataFrame)

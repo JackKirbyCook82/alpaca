@@ -12,8 +12,8 @@ from abc import ABC, ABCMeta
 
 from finance.concepts import Querys, Concepts, Securities, Strategies, OSI
 from webscraping.weburl import WebURL, WebPayload
-from webscraping.webpages import WebJSONPage
-from support.mixins import Emptying, Logging, Naming
+from webscraping.webpages import WebJSONPage, WebUploader
+from support.mixins import Naming
 from support.meta import RegistryMeta
 
 __version__ = "1.0.0"
@@ -73,11 +73,7 @@ class AlpacaOrderPage(WebJSONPage):
         self.load(url, *args, payload=payload.json, **kwargs)
 
 
-class AlpacaOrderUploader(Emptying, Logging, title="Uploaded"):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.page = AlpacaOrderPage(*args, **kwargs)
-
+class AlpacaOrderUploader(WebUploader, page=AlpacaOrderPage):
     def execute(self, prospects, /, **kwargs):
         assert isinstance(prospects, pd.DataFrame)
         if self.empty(prospects): return
