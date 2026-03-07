@@ -9,6 +9,8 @@ Created on Mon Jan 13 2025
 import numpy as np
 import pandas as pd
 from abc import ABC
+from itertools import groupby
+from operator import attrgetter
 from datetime import datetime as Datetime
 from collections import namedtuple as ntuple
 
@@ -25,10 +27,11 @@ __license__ = "MIT License"
 
 
 Field = ntuple("Field", "name code parser")
-market_fields = [Field("last", "p", np.float32), Field("bid", "dp", np.float32), Field("ask", "ap", np.float32), Field("supply", "as", np.float32), Field("demand", "bs", np.float32)]
-market_parser = lambda mapping: {field.name: field.parser(mapping[field.code]) for field in market_fields}
+market_fields = [Field("last", "p", np.float32), Field("bid", "bp", np.float32), Field("ask", "ap", np.float32), Field("supply", "as", np.float32), Field("demand", "bs", np.float32)]
+market_parser = lambda mapping: {field.name: field.parser(mapping[field.code]) for field in market_fields if field.code in mapping.keys()}
 stocks_parser = lambda contents: [{"ticker": ticker} | market_parser(mapping) for ticker, mapping in contents.items()]
-options_parser = lambda contents: [dict(OSI.parse(osi)) | market_parser(contents) for osi, mapping in contents.items()]
+options_parser = lambda contents: [dict(OSI.parse(osi)) | market_parser(mapping) for osi, mapping in contents.items()]
+pagination_parser = lambda string: str(string) if string != "None" else None
 expire_parser = lambda string: Datetime.strptime(string, "%Y-%m-%d").date()
 strike_parser = lambda content: np.round(float(content), 2)
 
@@ -62,7 +65,7 @@ class AlpacaContractURL(AlpacaMarketURL, domain="https://paper-api.alpaca.market
     @staticmethod
     def expires(*args, expiry=None, **kwargs): return {"expiration_date_gte": str(expiry.minimum.strftime("%Y-%m-%d")), "expiration_date_lte": str(expiry.maximum.strftime("%Y-%m-%d"))} if bool(expiry) else {}
     @staticmethod
-    def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if bool(pagination) else {}
+    def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if pagination is not None else {}
 
 
 class AlpacaMarketData(WebJSON.Mapping, multiple=False, optional=False):
@@ -91,7 +94,7 @@ class AlpacaOptionTradeData(AlpacaOptionData, key="trade", locator="//trades", p
 class AlpacaOptionQuoteData(AlpacaOptionData, key="quote", locator="//quotes", parser=options_parser): pass
 
 class AlpacaContractData(WebJSON, multiple=False, optional=False):
-    class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=str, multiple=False, optional=True): pass
+    class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=pagination_parser, multiple=False, optional=True): pass
     class Contracts(WebJSON, key="contracts", locator="//option_contracts[]", parser=Querys.Contract, multiple=True, optional=True):
         class Ticker(WebJSON.Text, key="ticker", locator="//underlying_symbol", parser=str): pass
         class Expire(WebJSON.Text, key="expire", locator="//expiration_date", parser=expire_parser): pass
@@ -121,7 +124,7 @@ class AlpacaStockQuotePage(WebJSONPage):
 
 class AlpacaOptionTradePage(WebJSONPage):
     def execute(self, *args, contracts, **kwargs):
-        contracts = [str(contract) for contract in contracts]
+        contracts = [str(OSI(contract)) for contract in contracts]
         parameters = dict(products=contracts, authenticator=self.source.authenticator)
         url = AlpacaOptionTradeURL(*args, **parameters, **kwargs)
         self.load(url, *args, **kwargs)
@@ -131,7 +134,7 @@ class AlpacaOptionTradePage(WebJSONPage):
 
 class AlpacaOptionQuotePage(WebJSONPage):
     def execute(self, *args, contracts, **kwargs):
-        contracts = [str(contract) for contract in contracts]
+        contracts = [str(OSI(contract)) for contract in contracts]
         parameters = dict(products=contracts, authenticator=self.source.authenticator)
         url = AlpacaOptionQuoteURL(*args, **parameters, **kwargs)
         self.load(url, *args, **kwargs)
@@ -148,7 +151,7 @@ class AlpacaContractPage(WebJSONPage):
         contents = [data(*args, **kwargs) for data in datas["contracts"]]
         pagination = datas["pagination"](*args, **kwargs)
         if not bool(pagination): return list(contents)
-        else: return list(contents) + self.execute(args, pagination=pagination, **parameters, **kwargs)
+        else: return list(contents) + self.execute(args, symbol=symbol, expiry=expiry, pagination=pagination, **kwargs)
 
 
 class AlpacaSecurityDownloader(WebDownloader, ABC):
@@ -169,8 +172,7 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, pages={"trade": AlpacaStoc
     def execute(self, symbols, /, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
-        if bool(self.limit):
-            symbols = [symbols[index:index+self.limit] for index in range(0, len(symbols), self.limit)]
+        symbols = [symbols[index:index+100] for index in range(0, len(symbols), 100)]
         for symbols in iter(symbols):
             stocks = self.download(symbols=symbols, query=Querys.Symbol, **kwargs)
             assert isinstance(stocks, pd.DataFrame)
@@ -191,9 +193,10 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, pages={"trade": AlpacaOpt
     def execute(self, contracts, /, **kwargs):
         contracts = self.querys(contracts, Querys.Contract)
         if not bool(contracts): return
-        if bool(self.limit):
-            contracts = [contracts[index:index+self.limit] for index in range(0, len(contracts), self.limit)]
-        for contracts in iter(contracts):
+        sortkey = attrgetter("ticker", "expire")
+        contracts = [list(group) for _, group in groupby(sorted(contracts, key=sortkey), key=sortkey)]
+        for contracts in contracts:
+            assert len(contracts) <= 100
             options = self.download(contracts=contracts, query=Querys.Contract, **kwargs)
             assert isinstance(options, pd.DataFrame)
             if self.empty(options): continue
