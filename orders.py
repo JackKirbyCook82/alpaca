@@ -91,8 +91,8 @@ class AlpacaOrderUploader(WebUploader, page=AlpacaOrderPage):
             options = {Securities.Options[option]: strike for option, strike in options.items() if not np.isnan(strike)}
             stocks = [Securities.Stocks(stock) for stock in strategy.stocks]
             assert spot >= breakeven and quantity >= 1
-            options = [AlpacaOption(strike=strike, quantity=1, **dict(security), **settlement) for security, strike in options.items()]
-            stocks = [AlpacaStock(quantity=100, **dict(security), **settlement) for security in stocks]
+            options = [AlpacaOption(strike=strike, **dict(security), **settlement) for security, strike in options.items()]
+            stocks = [AlpacaStock(**dict(security), **settlement) for security in stocks]
             try: order = AlpacaOrder[strategy](securities=stocks + options, term=term, tenure=tenure, limit=-breakeven, stop=None, quantity=quantity)
             except KeyError: continue
             valuation = AlpacaValuation(npv=prospect["npv"])
