@@ -9,15 +9,14 @@ Created on Thurs Mar 19 2026
 import numpy as np
 import pandas as pd
 from types import SimpleNamespace
+from abc import ABC, abstractmethod
 from datetime import datetime as Datetime
 from collections import namedtuple as ntuple
-from abc import ABC, ABCMeta, abstractmethod
 
 from finance.concepts import Concepts, Querys, OptionOSI
-from webscraping.webpages import WebJSONPage
+from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
-from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -180,30 +179,9 @@ class AlpacaOptionPage(AlpacaSecurityPage):
         return dataframe
 
 
-class AlpacaMarketDownloaderMeta(ABCMeta):
-    def __init__(cls, *args, **kwargs):
-        super(AlpacaMarketDownloaderMeta, cls).__init__(*args, **kwargs)
-        cls.__Page__ = kwargs.get("page", getattr(cls, "__Page__", None))
-
-    def __call__(cls, *args, source, authenticator, **kwargs):
-        parameters = dict(source=source, authenticator=authenticator)
-        page = cls.Page(**parameters)
-        instance = super(AlpacaMarketDownloaderMeta, cls).__call__(*args, page=page, **kwargs)
-        return instance
-
-    @property
-    def Page(cls): return cls.__Page__
-
-
-class AlpacaMarketDownloader(Logging, ABC, metaclass=AlpacaMarketDownloaderMeta):
-    def __init__(self, *args, page, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__page = page
-
+class AlpacaMarketDownloader(WebStream, ABC):
     @abstractmethod
     def downloader(self, *args, **kwargs): pass
-    @property
-    def page(self): return self.__page
 
 
 class AlpacaSecurityDownloader(AlpacaMarketDownloader, ABC):
@@ -222,7 +200,7 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaContractPage):
         tickers = list({symbol.ticker for symbol in symbols})
         stocks = self.downloader(*args, tickers=tickers, **kwargs)
         stocks = pd.concat(list(stocks), axis=1)
-        self.console(title="Downloaded")
+#        self.console(title="Downloaded")
         return stocks
 
     def downloader(self, *args, tickers, **kwargs):
@@ -239,7 +217,7 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
         contracts = self.downloader(*args, tickers=tickers, expires=expires, strikes=strikes, **kwargs)
         contracts = list(contracts)
         contracts.sort(key=lambda contract: (contract.ticker, contract.expire))
-        self.console(title="Downloaded")
+#        self.console(title="Downloaded")
         return contracts
 
     def downloader(self, *args, tickers, expires=None, strikes=None, **kwargs):
@@ -260,7 +238,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaContractPage):
         expires = list({contract.expire for contract in contracts})
         expires = SimpleNamespace(minimum=min(expires), maximum=max(expires))
         expires = f"{expires.min.strftime('%Y%m%d')}->{expires.max.strftime('%Y%m%d')}"
-        self.console(title="Downloaded")
+#        self.console(title="Downloaded")
         return options
 
     def downloader(self, *args, contracts, **kwargs):
