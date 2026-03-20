@@ -184,16 +184,7 @@ class AlpacaMarketDownloader(WebStream, ABC):
     def downloader(self, *args, **kwargs): pass
 
 
-class AlpacaSecurityDownloader(AlpacaMarketDownloader, ABC):
-    def __init__(self, *args, capacity=100, **kwargs):
-        super().__init__(*args, **kwargs)
-        assert isinstance(capacity, int)
-        self.__capacity = capacity
-
-    @property
-    def capacity(self): return self.__capacity
-
-
+class AlpacaSecurityDownloader(AlpacaMarketDownloader, ABC): pass
 class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaContractPage):
     def __call__(self, *args, symbols, **kwargs):
         assert isinstance(symbols, list)
