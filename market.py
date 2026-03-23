@@ -247,7 +247,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
         tickers = list({contract.ticker for contract in contracts})
         tickers = '|'.join(list(tickers))
         expires = list({contract.expire for contract in contracts})
-        expires = SimpleNamespace(minimum=min(expires), maximum=max(expires))
+        expires = SimpleNamespace(min=min(expires), max=max(expires))
         expires = f"{expires.min.strftime('%Y%m%d')}->{expires.max.strftime('%Y%m%d')}"
         self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {str(expires)}, {int(size):.0f}]")
 
