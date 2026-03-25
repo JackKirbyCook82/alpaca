@@ -9,9 +9,9 @@ Created on Thurs Mar 19 2026
 import numpy as np
 import pandas as pd
 from types import SimpleNamespace
+from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from datetime import datetime as Datetime
-from collections import namedtuple as ntuple
 
 from finance.concepts import Concepts, Querys, OptionOSI
 from webscraping.webpages import WebJSONPage, WebStream
@@ -91,12 +91,13 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
         class Strike(WebJSON.Text, key="strike", locator="//strike_price", parser=strike_parser): pass
 
 
+@dataclass(frozen=True)
+class AlpacaField: name: str; code: str; parser: callable
 class AlpacaMarketPage(WebJSONPage, ABC): pass
 class AlpacaSecurityPage(AlpacaMarketPage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        Field = ntuple("Field", "name code parser")
-        fields = [Field("last", "p", np.float32), Field("bid", "bp", np.float32), Field("ask", "ap", np.float32), Field("supply", "as", np.float32), Field("demand", "bs", np.float32)]
+        fields = [AlpacaField("last", "p", np.float32), AlpacaField("bid", "bp", np.float32), AlpacaField("ask", "ap", np.float32), AlpacaField("supply", "as", np.float32), AlpacaField("demand", "bs", np.float32)]
         self.__fields = fields
 
     def parser(self, mapping):
@@ -160,7 +161,7 @@ class AlpacaContractPage(AlpacaMarketPage):
 
 class AlpacaOptionPage(AlpacaSecurityPage):
     def __call__(self, *args, contracts, **kwargs):
-        osis = list(map(lambda contract: str(OptionOSI(contract)), contracts))
+        osis = list(map(lambda contract: str(OptionOSI.create(contract)), contracts))
         parameters = dict(osis=osis, authenticator=self.authenticator)
         trades = self.trades(**parameters)
         quotes = self.quotes(**parameters)
@@ -170,7 +171,7 @@ class AlpacaOptionPage(AlpacaSecurityPage):
     def trades(self, *args, **kwargs):
         url = AlpacaOptionTradeURL(*args, **kwargs)
         json = self.load(url)["trades"]
-        records = [dict(OptionOSI(osi).items()) | self.parser(contents) for osi, contents in json.items()]
+        records = [dict(OptionOSI.create(osi).items()) | self.parser(contents) for osi, contents in json.items()]
         dataframe = pd.DataFrame.from_records(records)
         dataframe["instrument"] = Concepts.Securities.Instrument.OPTION
         return dataframe
@@ -178,7 +179,7 @@ class AlpacaOptionPage(AlpacaSecurityPage):
     def quotes(self, *args, **kwargs):
         url = AlpacaOptionQuoteURL(*args, **kwargs)
         json = self.load(url)["quotes"]
-        records = [dict(OptionOSI(osi).items()) | self.parser(contents) for osi, contents in json.items()]
+        records = [dict(OptionOSI.create(osi).items()) | self.parser(contents) for osi, contents in json.items()]
         dataframe = pd.DataFrame.from_records(records)
         dataframe["instrument"] = Concepts.Securities.Instrument.OPTION
         return dataframe
