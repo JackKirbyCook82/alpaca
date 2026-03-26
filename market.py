@@ -17,6 +17,7 @@ from finance.concepts import Concepts, Querys, OptionOSI
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
+from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -93,6 +94,8 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
 
 @dataclass(frozen=True)
 class AlpacaField: name: str; code: str; parser: callable
+
+
 class AlpacaMarketPage(WebJSONPage, ABC): pass
 class AlpacaSecurityPage(AlpacaMarketPage):
     def __init__(self, *args, **kwargs):
@@ -148,15 +151,20 @@ class AlpacaStockPage(AlpacaSecurityPage):
 
 
 class AlpacaContractPage(AlpacaMarketPage):
-    def __call__(self, *args, ticker, expires=None, strikes=None, pagination=None, **kwargs):
+    def __call__(self, *args, ticker, expires=None, strikes=None, **kwargs):
+        parameters = dict(ticker=ticker, expires=expires, strikes=strikes, authenticator=self.authenticator)
+        contracts = self.contracts(**parameters)
+        return contracts
+
+    def contracts(self, *args, ticker, expires=None, strikes=None, pagination=None, **kwargs):
         parameters = dict(ticker=str(ticker), expires=expires, strikes=strikes)
-        url = AlpacaContractURL(pagination=pagination, authenticator=self.authenticator, **parameters)
+        url = AlpacaContractURL(pagination=pagination, **parameters)
         json = self.load(url)
         datas = AlpacaContractData(json, *args, **kwargs)
-        contents = [data(*args, **kwargs) for data in datas["contracts"]]
+        records = [data(*args, **kwargs) for data in datas["contracts"]]
         pagination = datas["pagination"](*args, **kwargs)
-        if not bool(pagination): return list(contents)
-        else: return list(contents) + self(*args, pagination=pagination, **parameters, **kwargs)
+        if not bool(pagination): return list(records)
+        else: return list(records) + self.contracts(*args, pagination=pagination, **parameters, **kwargs)
 
 
 class AlpacaOptionPage(AlpacaSecurityPage):
@@ -185,7 +193,7 @@ class AlpacaOptionPage(AlpacaSecurityPage):
         return dataframe
 
 
-class AlpacaMarketDownloader(WebStream, ABC):
+class AlpacaMarketDownloader(WebStream, Logging, ABC):
     @abstractmethod
     def downloader(self, *args, **kwargs): pass
 
