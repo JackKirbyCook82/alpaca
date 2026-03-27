@@ -136,16 +136,16 @@ class AlpacaStockPage(AlpacaSecurityPage):
     def trades(self, *args, **kwargs):
         url = AlpacaStockTradeURL(*args, **kwargs)
         json = self.load(url)["trades"]
-        records = [{"ticker": ticker} | self.parser(contents) for ticker, contents in json.items()]
+        records = [{"ticker": ticker} | self.parser(mapping) for ticker, mapping in json.items()]
         dataframe = pd.DataFrame.from_records(records)
         dataframe["instrument"] = Concepts.Securities.Instrument.STOCK
         return dataframe
 
     def quotes(self, *args, **kwargs):
         url = AlpacaStockQuoteURL(*args, **kwargs)
-        json = self.load(url)["quotes"]
-        records = [{"ticker": ticker} | self.parser(contents) for ticker, contents in json.items()]
-        dataframe = pd.DataFrame.from_records(records)
+        downloaded = self.load(url)["quotes"]
+        json = [{"ticker": ticker} | self.parser(mapping) for ticker, mapping in downloaded.items()]
+        dataframe = pd.DataFrame.from_records(json)
         dataframe["instrument"] = Concepts.Securities.Instrument.STOCK
         return dataframe
 
@@ -156,15 +156,14 @@ class AlpacaContractPage(AlpacaMarketPage):
         contracts = self.contracts(**parameters)
         return contracts
 
-    def contracts(self, *args, ticker, expires=None, strikes=None, pagination=None, **kwargs):
-        parameters = dict(ticker=str(ticker), expires=expires, strikes=strikes)
-        url = AlpacaContractURL(pagination=pagination, **parameters)
+    def contracts(self, *args, pagination=None, **kwargs):
+        url = AlpacaContractURL(*args, pagination=pagination, **kwargs)
         json = self.load(url)
         datas = AlpacaContractData(json, *args, **kwargs)
         records = [data(*args, **kwargs) for data in datas["contracts"]]
         pagination = datas["pagination"](*args, **kwargs)
         if not bool(pagination): return list(records)
-        else: return list(records) + self.contracts(*args, pagination=pagination, **parameters, **kwargs)
+        else: return list(records) + self.contracts(*args, pagination=pagination, **kwargs)
 
 
 class AlpacaOptionPage(AlpacaSecurityPage):
@@ -179,7 +178,7 @@ class AlpacaOptionPage(AlpacaSecurityPage):
     def trades(self, *args, **kwargs):
         url = AlpacaOptionTradeURL(*args, **kwargs)
         json = self.load(url)["trades"]
-        records = [dict(OptionOSI.create(osi).items()) | self.parser(contents) for osi, contents in json.items()]
+        records = [dict(OptionOSI.create(osi).items()) | self.parser(mapping) for osi, mapping in json.items()]
         dataframe = pd.DataFrame.from_records(records)
         dataframe["instrument"] = Concepts.Securities.Instrument.OPTION
         return dataframe
@@ -187,7 +186,7 @@ class AlpacaOptionPage(AlpacaSecurityPage):
     def quotes(self, *args, **kwargs):
         url = AlpacaOptionQuoteURL(*args, **kwargs)
         json = self.load(url)["quotes"]
-        records = [dict(OptionOSI.create(osi).items()) | self.parser(contents) for osi, contents in json.items()]
+        records = [dict(OptionOSI.create(osi).items()) | self.parser(mapping) for osi, mapping in json.items()]
         dataframe = pd.DataFrame.from_records(records)
         dataframe["instrument"] = Concepts.Securities.Instrument.OPTION
         return dataframe
@@ -205,7 +204,6 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaStockPage):
         tickers = list({symbol.ticker for symbol in symbols})
         stocks = self.downloader(*args, tickers=tickers, **kwargs)
         stocks = pd.concat(list(stocks), axis=0)
-        self.alert(tickers, len(stocks))
         return stocks
 
     def alert(self, tickers, size):
@@ -217,6 +215,7 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaStockPage):
         tickers = [tickers[index:index+self.capacity] for index in range(0, len(tickers), self.capacity)]
         for tickers in tickers:
             stocks = self.page(tickers=tickers)
+            self.alert(tickers, len(stocks))
             yield stocks
 
 
@@ -227,7 +226,6 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
         contracts = self.downloader(*args, tickers=tickers, expires=expires, strikes=strikes, **kwargs)
         contracts = list(contracts)
         contracts.sort(key=lambda contract: (contract.ticker, contract.expire))
-        self.alert(tickers, len(contracts))
         return contracts
 
     def alert(self, tickers, size):
@@ -239,8 +237,8 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
         for ticker in tickers:
             parameters = dict(ticker=ticker, expires=expires, strikes=strikes)
             contracts = self.page(**parameters)
-            for contract in contracts:
-                yield contract
+            self.alert(tickers, len(contracts))
+            for contract in contracts: yield contract
 
 
 class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
@@ -248,7 +246,6 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
         assert isinstance(contracts, list)
         options = self.downloader(*args, contracts=contracts, **kwargs)
         options = pd.concat(list(options), axis=0)
-        self.alert(contracts, len(options))
         return options
 
     def alert(self, contracts, size):
@@ -264,6 +261,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
         contracts = [contracts[index:index+self.capacity] for index in range(0, len(contracts), self.capacity)]
         for contracts in contracts:
             options = self.page(contracts=contracts)
+            self.alert(contracts, len(options))
             yield options
 
 
