@@ -120,7 +120,7 @@ class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
     def alert(self, dataframe):
         instrument = str(Concepts.Securities.Instrument.STOCK).title()
         tickers = "|".join(list(dataframe["ticker"].unique()))
-        self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {int(dataframe):.0f}]")
+        self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {len(dataframe):.0f}]")
 
 
 

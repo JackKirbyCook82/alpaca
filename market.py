@@ -8,7 +8,6 @@ Created on Thurs Mar 19 2026
 
 import numpy as np
 import pandas as pd
-from types import SimpleNamespace
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from datetime import datetime as Datetime
@@ -17,6 +16,7 @@ from finance.concepts import Concepts, Querys, OptionOSI
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
+from support.concepts import DateRange
 from support.mixins import Logging
 
 __version__ = "1.0.0"
@@ -240,9 +240,9 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
 
 
 class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
-    def __call__(self, *args, contracts, **kwargs):
+    def __call__(self, contracts, *args, **kwargs):
         assert isinstance(contracts, list)
-        options = self.downloader(*args, contracts=contracts, **kwargs)
+        options = self.downloader(contracts, *args, **kwargs)
         options = pd.concat(list(options), axis=0)
         return options
 
@@ -256,10 +256,9 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
     def alert(self, dataframe):
         instrument = str(Concepts.Securities.Instrument.OPTION).title()
         tickers = "|".join(list(dataframe["ticker"].unique()))
-        expires = list({contract.expire for contract in dataframe})
-        expires = SimpleNamespace(min=min(expires), max=max(expires))
-        expires = f"{expires.min.strftime('%Y%m%d')}->{expires.max.strftime('%Y%m%d')}"
-        self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {str(expires)}, {len(dataframe):.0f}]")
+        expires = DateRange.create(list(dataframe["expire"].unique()))
+        expires = f"{expires.minimum.strftime('%Y%m%d')}->{expires.maximum.strftime('%Y%m%d')}"
+        self.console("Calculated", f"{str(instrument)}[{str(tickers)}, {str(expires)}, {len(dataframe):.0f}]")
 
 
 
