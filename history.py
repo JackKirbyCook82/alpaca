@@ -101,26 +101,26 @@ class AlpacaHistoryDownloader(WebStream, Logging, ABC):
 
 
 class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
-    def __call__(self, *args, symbols, history, **kwargs):
+    def __call__(self, symbols, *args, **kwargs):
         assert isinstance(symbols, list)
         tickers = list({symbol.ticker for symbol in symbols})
-        bars = self.downloader(*args, tickers=tickers, history=history, **kwargs)
+        bars = self.downloader(tickers, *args, **kwargs)
         bars = pd.concat(list(bars), axis=0)
         bars["date"] = pd.to_datetime(bars["date"])
         bars = bars.sort_values(by=["ticker", "date"], ascending=[True, False], inplace=False)
         return bars
 
-    def alert(self, tickers, size):
-        instrument = str(Concepts.Securities.Instrument.STOCK).title()
-        tickers = '|'.join(list(tickers))
-        self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {int(size):.0f}]")
-
-    def downloader(self, *args, tickers, history, **kwargs):
+    def downloader(self, tickers, *args, **kwargs):
         tickers = [tickers[index:index+self.capacity] for index in range(0, len(tickers), self.capacity)]
         for tickers in tickers:
-            parameters = dict(tickers=tickers, history=history)
-            bars = self.page(**parameters)
-            self.alert(tickers, len(bars))
+            bars = self.page(*args, tickers=tickers, **kwargs)
+            self.alert(bars)
             yield bars
+
+    def alert(self, dataframe):
+        instrument = str(Concepts.Securities.Instrument.STOCK).title()
+        tickers = "|".join(list(dataframe["ticker"].unique()))
+        self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {int(dataframe):.0f}]")
+
 
 

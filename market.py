@@ -199,46 +199,44 @@ class AlpacaMarketDownloader(WebStream, Logging, ABC):
 
 class AlpacaSecurityDownloader(AlpacaMarketDownloader, ABC): pass
 class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaStockPage):
-    def __call__(self, *args, symbols, **kwargs):
+    def __call__(self, symbols, *args, **kwargs):
         assert isinstance(symbols, list)
         tickers = list({symbol.ticker for symbol in symbols})
-        stocks = self.downloader(*args, tickers=tickers, **kwargs)
+        stocks = self.downloader(tickers, *args, **kwargs)
         stocks = pd.concat(list(stocks), axis=0)
         return stocks
 
-    def alert(self, tickers, size):
-        instrument = str(Concepts.Securities.Instrument.STOCK).title()
-        tickers = '|'.join(list(tickers))
-        self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {int(size):.0f}]")
-
-    def downloader(self, *args, tickers, **kwargs):
+    def downloader(self, tickers, *args, **kwargs):
         tickers = [tickers[index:index+self.capacity] for index in range(0, len(tickers), self.capacity)]
         for tickers in tickers:
-            stocks = self.page(tickers=tickers)
-            self.alert(tickers, len(stocks))
+            stocks = self.page(*args, tickers=tickers, **kwargs)
+            self.alert(stocks)
             yield stocks
+
+    def alert(self, dataframe):
+        instrument = str(Concepts.Securities.Instrument.STOCK).title()
+        tickers = "|".join(list(dataframe["ticker"].unique()))
+        self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {len(dataframe):.0f}]")
 
 
 class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
-    def __call__(self, *args, symbols, expires=None, strikes=None, **kwargs):
+    def __call__(self, symbols, *args, **kwargs):
         assert isinstance(symbols, list)
         tickers = list({symbol.ticker for symbol in symbols})
-        contracts = self.downloader(*args, tickers=tickers, expires=expires, strikes=strikes, **kwargs)
+        contracts = self.downloader(tickers, *args, **kwargs)
         contracts = list(contracts)
         contracts.sort(key=lambda contract: (contract.ticker, contract.expire))
         return contracts
 
-    def alert(self, tickers, size):
-        query = str(Querys.Contract).title()
-        tickers = '|'.join(list(tickers))
-        self.console("Downloaded", f"{str(query)}[{str(tickers)}, {int(size):.0f}]")
-
-    def downloader(self, *args, tickers, expires=None, strikes=None, **kwargs):
+    def downloader(self, tickers, *args, **kwargs):
         for ticker in tickers:
-            parameters = dict(ticker=ticker, expires=expires, strikes=strikes)
-            contracts = self.page(**parameters)
-            self.alert(tickers, len(contracts))
+            contracts = self.page(*args, ticker=ticker, **kwargs)
+            self.alert(ticker, len(contracts))
             for contract in contracts: yield contract
+
+    def alert(self, ticker, size):
+        query = str(Querys.Contract).title()
+        self.console("Downloaded", f"{str(query)}[{str(ticker)}, {int(size):.0f}]")
 
 
 class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
@@ -248,20 +246,21 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
         options = pd.concat(list(options), axis=0)
         return options
 
-    def alert(self, contracts, size):
-        instrument = str(Concepts.Securities.Instrument.OPTION).title()
-        tickers = list({contract.ticker for contract in contracts})
-        tickers = '|'.join(list(tickers))
-        expires = list({contract.expire for contract in contracts})
-        expires = SimpleNamespace(min=min(expires), max=max(expires))
-        expires = f"{expires.min.strftime('%Y%m%d')}->{expires.max.strftime('%Y%m%d')}"
-        self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {str(expires)}, {int(size):.0f}]")
-
-    def downloader(self, *args, contracts, **kwargs):
+    def downloader(self, contracts, *args, **kwargs):
         contracts = [contracts[index:index+self.capacity] for index in range(0, len(contracts), self.capacity)]
         for contracts in contracts:
-            options = self.page(contracts=contracts)
-            self.alert(contracts, len(options))
+            options = self.page(*args, contracts=contracts, **kwargs)
+            self.alert(options)
             yield options
+
+    def alert(self, dataframe):
+        instrument = str(Concepts.Securities.Instrument.OPTION).title()
+        tickers = "|".join(list(dataframe["ticker"].unique()))
+        expires = list({contract.expire for contract in dataframe})
+        expires = SimpleNamespace(min=min(expires), max=max(expires))
+        expires = f"{expires.min.strftime('%Y%m%d')}->{expires.max.strftime('%Y%m%d')}"
+        self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {str(expires)}, {len(dataframe):.0f}]")
+
+
 
 
