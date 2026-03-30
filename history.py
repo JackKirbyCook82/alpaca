@@ -114,6 +114,7 @@ class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
         tickers = [tickers[index:index+self.capacity] for index in range(0, len(tickers), self.capacity)]
         for tickers in tickers:
             bars = self.page(*args, tickers=tickers, **kwargs)
+            if bool(bars.empty): continue
             self.alert(bars)
             yield bars
 

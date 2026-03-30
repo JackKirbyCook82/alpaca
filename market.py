@@ -210,6 +210,7 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaStockPage):
         tickers = [tickers[index:index+self.capacity] for index in range(0, len(tickers), self.capacity)]
         for tickers in tickers:
             stocks = self.page(*args, tickers=tickers, **kwargs)
+            if bool(stocks.empty): continue
             self.alert(stocks)
             yield stocks
 
@@ -250,6 +251,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
         contracts = [contracts[index:index+self.capacity] for index in range(0, len(contracts), self.capacity)]
         for contracts in contracts:
             options = self.page(*args, contracts=contracts, **kwargs)
+            if bool(options.empty): continue
             self.alert(options)
             yield options
 
