@@ -12,10 +12,11 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from datetime import datetime as Datetime
 
-from finance.concepts import Concepts, Querys, OptionOSI
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
+from options.osi import OptionOSI
+from support.finance import Concepts, Querys
 from support.concepts import DateRange
 from support.mixins import Logging
 

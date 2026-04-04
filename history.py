@@ -13,11 +13,11 @@ from abc import ABC, abstractmethod
 from datetime import timezone as Timezone
 from datetime import datetime as Datetime
 
-from finance.concepts import Concepts
-from support.mixins import Logging
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
+from support.finance import Concepts
+from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
