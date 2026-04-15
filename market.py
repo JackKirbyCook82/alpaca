@@ -16,8 +16,7 @@ from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 from options.osi import OptionOSI
-from support.finance import Concepts, Querys
-from support.concepts import DateRange
+from support.finance import Concepts, Querys, Alerting
 from support.mixins import Logging
 
 __version__ = "1.0.0"
@@ -193,12 +192,12 @@ class AlpacaOptionPage(AlpacaSecurityPage):
         return dataframe
 
 
-class AlpacaMarketDownloader(WebStream, Logging, ABC):
+class AlpacaMarketDownloader(WebStream, ABC):
     @abstractmethod
     def downloader(self, *args, **kwargs): pass
 
 
-class AlpacaSecurityDownloader(AlpacaMarketDownloader, ABC): pass
+class AlpacaSecurityDownloader(AlpacaMarketDownloader, Alerting, ABC): pass
 class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaStockPage):
     def __call__(self, symbols, *args, **kwargs):
         assert isinstance(symbols, list)
@@ -212,16 +211,11 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaStockPage):
         for tickers in tickers:
             stocks = self.page(*args, tickers=tickers, **kwargs)
             if bool(stocks.empty): continue
-            self.alert(stocks)
+            self.alert(stocks, title="Downloaded", instrument=Concepts.Securities.Instrument.STOCK)
             yield stocks
 
-    def alert(self, dataframe):
-        instrument = str(Concepts.Securities.Instrument.STOCK).title()
-        tickers = "|".join(list(dataframe["ticker"].unique()))
-        self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {len(dataframe):.0f}]")
 
-
-class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
+class AlpacaContractDownloader(AlpacaMarketDownloader, Logging, page=AlpacaContractPage):
     def __call__(self, symbols, *args, **kwargs):
         assert isinstance(symbols, list)
         tickers = list({symbol.ticker for symbol in symbols})
@@ -253,16 +247,8 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
         for contracts in contracts:
             options = self.page(*args, contracts=contracts, **kwargs)
             if bool(options.empty): continue
-            self.alert(options)
+            self.alert(options, title="Downloaded", instrument=Concepts.Securities.Instrument.OPTION)
             yield options
-
-    def alert(self, dataframe):
-        instrument = str(Concepts.Securities.Instrument.OPTION).title()
-        tickers = "|".join(list(dataframe["ticker"].unique()))
-        expires = DateRange.create(list(dataframe["expire"].unique()))
-        expires = f"{expires.minimum.strftime('%Y%m%d')}->{expires.maximum.strftime('%Y%m%d')}"
-        self.console("Calculated", f"{str(instrument)}[{str(tickers)}, {str(expires)}, {len(dataframe):.0f}]")
-
 
 
 

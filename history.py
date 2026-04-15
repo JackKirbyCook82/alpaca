@@ -16,8 +16,7 @@ from datetime import datetime as Datetime
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
-from support.finance import Concepts
-from support.mixins import Logging
+from support.finance import Concepts, Alerting
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -95,7 +94,7 @@ class AlpacaBarsPage(AlpacaHistoryPage):
     def fields(self): return self.__fields
 
 
-class AlpacaHistoryDownloader(WebStream, Logging, ABC):
+class AlpacaHistoryDownloader(WebStream, Alerting, ABC):
     @abstractmethod
     def downloader(self, *args, **kwargs): pass
 
@@ -115,13 +114,9 @@ class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
         for tickers in tickers:
             bars = self.page(*args, tickers=tickers, **kwargs)
             if bool(bars.empty): continue
-            self.alert(bars)
+            self.alert(bars, title="Downloaded", instrument=Concepts.Securities.Instrument.STOCK)
             yield bars
 
-    def alert(self, dataframe):
-        instrument = str(Concepts.Securities.Instrument.STOCK).title()
-        tickers = "|".join(list(dataframe["ticker"].unique()))
-        self.console("Downloaded", f"{str(instrument)}[{str(tickers)}, {len(dataframe):.0f}]")
 
 
 
