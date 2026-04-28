@@ -111,6 +111,9 @@ class AlpacaSecurityPage(AlpacaMarketPage):
         assert isinstance(trades, pd.DataFrame) and isinstance(quotes, pd.DataFrame)
         if trades.empty or quotes.empty: return pd.DataFrame()
         header = list(trades.columns) + [column for column in list(quotes.columns) if column not in list(trades.columns)]
+        if "option" in header:
+            on = [value if value != "option" else "key" for value in on]
+            trades["key"], quotes["key"] = str(trades["option"]), str(quotes["option"])
         dataframe = quotes.merge(trades, how="outer", on=list(on), sort=False, suffixes=("", "_"))[header]
         return dataframe
 
