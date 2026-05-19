@@ -9,6 +9,7 @@ Created on Sat May 16 2026
 from abc import ABC, abstractmethod
 
 from webscraping.webpages import WebStream, WebJSONPage
+from webscraping.webpayloads import WebPayload
 from webscraping.weburl import WebURL
 from support.finance import Alerting
 
@@ -29,8 +30,15 @@ class AlpacaSpreadURL(AlpacaOrderURL, domain="https://paper-api.alpaca.markets",
     pass
 
 
-class AlpacaSpreadPayload(object):
-    pass
+class AlpacaSpreadPayload(WebPayload.Mapping, parameters={"order_class": "mleg", "extended_hours": False, "qty": "1"}):
+    class Identity(WebPayload.Text, locator="identity"): pass
+    class Limit(WebPayload.Text, locator="limit_price"): pass
+    class Tenure(WebPayload.Text, locator="tenure"): pass
+    class Terms(WebPayload.Text, locator="type"): pass
+    class Legs(WebPayload.Mapping, locator="legs", multiple=True):
+        class Osi(WebPayload.Text, locator="symbol"): pass
+        class Position(WebPayload.Text, locator="side"): pass
+        class Quantity(WebPayload.Text, locator="ratio_qty"): pass
 
 
 class AlpacaOrderPage(WebJSONPage, ABC): pass

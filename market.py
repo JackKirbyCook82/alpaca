@@ -43,7 +43,7 @@ class AlpacaStockURL(AlpacaSecurityURL, domain="https://data.alpaca.markets", pa
     def parameters(*args, tickers, **kwargs):
         return {"symbols": ",".join(list(tickers))}
 
-class AlpacaOptionURL(AlpacaSecurityURL, domain="https://data.alpaca.markets", path=["v1beta1", "options"], parameters={"feed": "indicative"}):
+class AlpacaOptionURL(AlpacaSecurityURL, domain="https://data.alpaca.markets", path=["v1beta1key", "options"], parameters={"feed": "indicative"}):
     @staticmethod
     def parameters(*args, osis, **kwargs):
         return {"symbols": ",".join(list(osis))}
