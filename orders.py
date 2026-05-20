@@ -6,18 +6,26 @@ Created on Sat May 16 2026
 
 """
 
+import numpy as np
 from abc import ABC, abstractmethod
 
 from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webpayloads import WebPayload
 from webscraping.weburl import WebURL
-from support.finance import Alerting
+from support.finance import Alerting, Concepts
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
 __all__ = ["AlpacaSpreadUploader"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
+
+
+cost_parser = lambda value: str(np.negative(value))
+tenure_parser = lambda tenure: {Concepts.Markets.Tenure.DAY: "day"}[tenure]
+term_parser = lambda term: {Concepts.Markets.Term.LIMIT: "limit"}[term]
+position_parser = lambda tenure: {Concepts.Securities.Position.LONG: "buy", Concepts.Securities.Position.SHORT: "sell"}[tenure]
+quantity_parser = lambda value: str(abs(value))
 
 
 class AlpacaOrderURL(WebURL, headers={"accept": "application/json", "content-type": "application/json"}):
@@ -30,21 +38,25 @@ class AlpacaSpreadURL(AlpacaOrderURL, domain="https://paper-api.alpaca.markets",
     pass
 
 
-class AlpacaSpreadPayload(WebPayload.Mapping, parameters={"order_class": "mleg", "extended_hours": False, "qty": "1"}):
-    class Identity(WebPayload.Text, locator="identity"): pass
-    class Limit(WebPayload.Text, locator="limit_price"): pass
-    class Tenure(WebPayload.Text, locator="tenure"): pass
-    class Terms(WebPayload.Text, locator="type"): pass
-    class Legs(WebPayload.Mapping, locator="legs", multiple=True):
-        class Osi(WebPayload.Text, locator="symbol"): pass
-        class Position(WebPayload.Text, locator="side"): pass
-        class Quantity(WebPayload.Text, locator="ratio_qty"): pass
+class AlpacaSpreadPayload(WebPayload.Mapping, payloads={"order_class": "mleg", "extended_hours": False, "qty": "1"}):
+    class Cost(WebPayload.Text, key="cost", locator="limit_price", parser=cost_parser): pass
+    class Tenure(WebPayload.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
+    class Terms(WebPayload.Text, key="term", locator="type", parser=term_parser): pass
+    class Legs(WebPayload.Mapping, key="securities", locator="legs", multiple=True):
+        class Osi(WebPayload.Text, key="osi", locator="symbol"): pass
+        class Position(WebPayload.Text, key="position", locator="side", parser=position_parser): pass
+        class Quantity(WebPayload.Text, key="quantity", locator="ratio_qty", parser=quantity_parser): pass
 
 
 class AlpacaOrderPage(WebJSONPage, ABC): pass
 class AlpacaSpreadPage(AlpacaOrderPage):
-    def __call__(self, *args, spread, **kwargs):
-        pass
+    def __call__(self, *args, spread, tenure, term, **kwargs):
+        keys, records = ["osi", "position", "quantity"], zip(spread.osi, spread.position, spread.quantity)
+        securities = [dict(zip(keys, values)) for values in records]
+        sources = dict(identity=None, cost=spread.cost, tenure=tenure, term=term, securities=securities)
+        url = AlpacaSpreadURL(authenticator=self.authenticator)
+        payload = AlpacaSpreadPayload(sources)
+        self.load(url, *args, payload=payload.json, **kwargs)
 
 
 class AlpacaOrderUploader(WebStream, Alerting, ABC):
@@ -58,5 +70,6 @@ class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
 
     def uploader(self, spreads, *args, **kwargs):
         pass
+
 
 
