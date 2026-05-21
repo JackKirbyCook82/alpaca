@@ -38,7 +38,7 @@ class AlpacaSpreadURL(AlpacaOrderURL, domain="https://paper-api.alpaca.markets",
     pass
 
 
-class AlpacaSpreadPayload(WebPayload.Mapping, payloads={"order_class": "mleg", "extended_hours": False, "qty": "1"}):
+class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "extended_hours": False, "qty": "1"}):
     class Cost(WebPayload.Text, key="cost", locator="limit_price", parser=cost_parser): pass
     class Tenure(WebPayload.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
     class Terms(WebPayload.Text, key="term", locator="type", parser=term_parser): pass
@@ -53,7 +53,7 @@ class AlpacaSpreadPage(AlpacaOrderPage):
     def __call__(self, *args, spread, tenure, term, **kwargs):
         keys, records = ["osi", "position", "quantity"], zip(spread.osi, spread.position, spread.quantity)
         securities = [dict(zip(keys, values)) for values in records]
-        sources = dict(identity=None, cost=spread.cost, tenure=tenure, term=term, securities=securities)
+        sources = dict(cost=spread.cost, tenure=tenure, term=term, securities=securities)
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
         self.load(url, *args, payload=payload.json, **kwargs)
