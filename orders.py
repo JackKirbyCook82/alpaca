@@ -56,7 +56,7 @@ class AlpacaSpreadPage(AlpacaOrderPage):
         sources = dict(cost=spread.cost, tenure=tenure, term=term, securities=securities)
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
-        json = self.load(url, payload=payload)
+        self.load(url, payload=payload)
 
 
 class AlpacaOrderUploader(WebStream, Alerting, ABC):
@@ -66,10 +66,14 @@ class AlpacaOrderUploader(WebStream, Alerting, ABC):
 
 class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
     def __call__(self, spreads, *args, **kwargs):
-        pass
+        assert isinstance(spreads, list)
+        if not bool(spreads): return
+        self.uploader(spreads, *args, **kwargs)
 
     def uploader(self, spreads, *args, **kwargs):
-        pass
+        for spread in spreads:
+            self.page(*args, spread=spread, **kwargs)
+            self.alert(spread, title="Uploaded", instrument=Concepts.Securities.Instrument.SPREAD)
 
 
 
