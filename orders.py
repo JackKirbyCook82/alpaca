@@ -56,7 +56,7 @@ class AlpacaSpreadPage(AlpacaOrderPage):
         sources = dict(cost=spread.cost, tenure=tenure, term=term, securities=securities)
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
-        self.load(url, *args, payload=payload.json, **kwargs)
+        self.load(url, *args, payload=payload, **kwargs)
 
 
 class AlpacaOrderUploader(WebStream, Alerting, ABC):
