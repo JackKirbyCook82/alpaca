@@ -12,10 +12,11 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from datetime import datetime as Datetime
 
+from finance.variables import Alerting, Concepts, Querys
+from options.osi import OptionOSI
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
-from options.osi import OptionOSI
 from support.mixins import Logging
 
 __version__ = "1.0.0"
@@ -87,7 +88,7 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
     class Contracts(WebJSON, key="contracts", locator="//option_contracts[]", parser=Querys.Contract, multiple=True, optional=True):
         class Ticker(WebJSON.Text, key="ticker", locator="//underlying_symbol", parser=str): pass
         class Expire(WebJSON.Text, key="expire", locator="//expiration_date", parser=expire_parser): pass
-        class Option(WebJSON.Text, key="option", locator="//type", parser=Concepts.Securities.Option): pass
+        class Option(WebJSON.Text, key="option", locator="//type", parser=Concepts.Option): pass
         class Strike(WebJSON.Text, key="strike", locator="//strike_price", parser=strike_parser): pass
 
 
@@ -140,7 +141,7 @@ class AlpacaStockPage(AlpacaSecurityPage):
         json = self.load(url)["trades"]
         records = [{"ticker": ticker} | self.parser(mapping) for ticker, mapping in json.items()]
         dataframe = pd.DataFrame.from_records(records)
-        dataframe["instrument"] = Concepts.Securities.Instrument.STOCK
+        dataframe["instrument"] = Concepts.Instrument.STOCK
         return dataframe
 
     def quotes(self, *args, **kwargs):
@@ -148,7 +149,7 @@ class AlpacaStockPage(AlpacaSecurityPage):
         downloaded = self.load(url)["quotes"]
         json = [{"ticker": ticker} | self.parser(mapping) for ticker, mapping in downloaded.items()]
         dataframe = pd.DataFrame.from_records(json)
-        dataframe["instrument"] = Concepts.Securities.Instrument.STOCK
+        dataframe["instrument"] = Concepts.Instrument.STOCK
         return dataframe
 
 
@@ -182,7 +183,7 @@ class AlpacaOptionPage(AlpacaSecurityPage):
         json = self.load(url)["trades"]
         records = [dict(OptionOSI.create(osi).items()) | self.parser(mapping) for osi, mapping in json.items()]
         dataframe = pd.DataFrame.from_records(records)
-        dataframe["instrument"] = Concepts.Securities.Instrument.OPTION
+        dataframe["instrument"] = Concepts.Instrument.OPTION
         return dataframe
 
     def quotes(self, *args, **kwargs):
@@ -190,7 +191,7 @@ class AlpacaOptionPage(AlpacaSecurityPage):
         json = self.load(url)["quotes"]
         records = [dict(OptionOSI.create(osi).items()) | self.parser(mapping) for osi, mapping in json.items()]
         dataframe = pd.DataFrame.from_records(records)
-        dataframe["instrument"] = Concepts.Securities.Instrument.OPTION
+        dataframe["instrument"] = Concepts.Instrument.OPTION
         return dataframe
 
 
@@ -213,7 +214,7 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaStockPage):
         for tickers in tickers:
             stocks = self.page(*args, tickers=tickers, **kwargs)
             if bool(stocks.empty): continue
-            self.alert(stocks, title="Downloaded", instrument=Concepts.Securities.Instrument.STOCK)
+            self.alert(stocks, title="Downloaded", instrument=Concepts.Instrument.STOCK)
             yield stocks
 
 
@@ -249,7 +250,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
         for contracts in contracts:
             options = self.page(*args, contracts=contracts, **kwargs)
             if bool(options.empty): continue
-            self.alert(options, title="Downloaded", instrument=Concepts.Securities.Instrument.OPTION)
+            self.alert(options, title="Downloaded", instrument=Concepts.Instrument.OPTION)
             yield options
 
 

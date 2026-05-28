@@ -9,6 +9,7 @@ Created on Sat May 16 2026
 import numpy as np
 from abc import ABC, abstractmethod
 
+from finance.variables import Alerting, Concepts
 from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webpayloads import WebPayload
 from webscraping.weburl import WebURL
@@ -21,9 +22,9 @@ __license__ = "MIT License"
 
 
 cost_parser = lambda value: str(np.negative(value))
-tenure_parser = lambda tenure: {Concepts.Markets.Tenure.DAY: "day"}[tenure]
-term_parser = lambda term: {Concepts.Markets.Term.LIMIT: "limit"}[term]
-position_parser = lambda tenure: {Concepts.Securities.Position.LONG: "buy", Concepts.Securities.Position.SHORT: "sell"}[tenure]
+tenure_parser = lambda tenure: {Concepts.Tenure.DAY: "day"}[tenure]
+term_parser = lambda term: {Concepts.Terms.LIMIT: "limit"}[term]
+position_parser = lambda tenure: {Concepts.Position.LONG: "buy", Concepts.Position.SHORT: "sell"}[tenure]
 quantity_parser = lambda value: str(abs(value))
 
 
@@ -72,7 +73,7 @@ class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
     def uploader(self, spreads, *args, **kwargs):
         for spread in spreads:
             self.page(*args, spread=spread, **kwargs)
-            self.alert(spread, title="Uploaded", instrument=Concepts.Securities.Instrument.SPREAD)
+            self.alert(spread, title="Uploaded", instrument=Concepts.Instrument.SPREAD)
 
 
 
