@@ -16,7 +16,6 @@ from datetime import datetime as Datetime
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
-from support.finance import Concepts, Alerting
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"

@@ -16,7 +16,6 @@ from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 from options.osi import OptionOSI
-from support.finance import Concepts, Querys, Alerting
 from support.mixins import Logging
 
 __version__ = "1.0.0"
@@ -43,7 +42,7 @@ class AlpacaStockURL(AlpacaSecurityURL, domain="https://data.alpaca.markets", pa
     def parameters(*args, tickers, **kwargs):
         return {"symbols": ",".join(list(tickers))}
 
-class AlpacaOptionURL(AlpacaSecurityURL, domain="https://data.alpaca.markets", path=["v1beta1key", "options"], parameters={"feed": "indicative"}):
+class AlpacaOptionURL(AlpacaSecurityURL, domain="https://data.alpaca.markets", path=["v1beta1", "options"], parameters={"feed": "indicative"}):
     @staticmethod
     def parameters(*args, osis, **kwargs):
         return {"symbols": ",".join(list(osis))}

@@ -12,7 +12,6 @@ from abc import ABC, abstractmethod
 from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webpayloads import WebPayload
 from webscraping.weburl import WebURL
-from support.finance import Alerting, Concepts
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
