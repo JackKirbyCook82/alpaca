@@ -12,8 +12,7 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from datetime import datetime as Datetime
 
-from finance.variables import Alerting, Concepts, Querys
-from options.osi import OptionOSI
+from finance.variables import Alerting, Concepts, Querys, OSI
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
@@ -85,10 +84,10 @@ class AlpacaContractURL(AlpacaMarketURL, domain="https://paper-api.alpaca.market
 
 class AlpacaContractData(WebJSON, multiple=False, optional=False):
     class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=pagination_parser, multiple=False, optional=True): pass
-    class Contracts(WebJSON, key="contracts", locator="//option_contracts[]", parser=Querys.Contract, multiple=True, optional=True):
+    class Contracts(WebJSON, key="contracts", locator="//option_contracts[]", parser=Querys.Contract.create, multiple=True, optional=True):
         class Ticker(WebJSON.Text, key="ticker", locator="//underlying_symbol", parser=str): pass
         class Expire(WebJSON.Text, key="expire", locator="//expiration_date", parser=expire_parser): pass
-        class Option(WebJSON.Text, key="option", locator="//type", parser=Concepts.Option): pass
+        class Option(WebJSON.Text, key="option", locator="//type", parser=Concepts.Option.create): pass
         class Strike(WebJSON.Text, key="strike", locator="//strike_price", parser=strike_parser): pass
 
 
@@ -171,7 +170,7 @@ class AlpacaContractPage(AlpacaMarketPage):
 
 class AlpacaOptionPage(AlpacaSecurityPage):
     def __call__(self, *args, contracts, **kwargs):
-        osis = list(map(lambda contract: str(OptionOSI.create(contract)), contracts))
+        osis = list(map(lambda contract: str(OSI.create(contract)), contracts))
         parameters = dict(osis=osis, authenticator=self.authenticator)
         trades = self.trades(**parameters)
         quotes = self.quotes(**parameters)
@@ -181,7 +180,7 @@ class AlpacaOptionPage(AlpacaSecurityPage):
     def trades(self, *args, **kwargs):
         url = AlpacaOptionTradeURL(*args, **kwargs)
         json = self.load(url)["trades"]
-        records = [dict(OptionOSI.create(osi).items()) | self.parser(mapping) for osi, mapping in json.items()]
+        records = [dict(OSI.create(osi).items()) | self.parser(mapping) for osi, mapping in json.items()]
         dataframe = pd.DataFrame.from_records(records)
         dataframe["instrument"] = Concepts.Instrument.OPTION
         return dataframe
@@ -189,7 +188,7 @@ class AlpacaOptionPage(AlpacaSecurityPage):
     def quotes(self, *args, **kwargs):
         url = AlpacaOptionQuoteURL(*args, **kwargs)
         json = self.load(url)["quotes"]
-        records = [dict(OptionOSI.create(osi).items()) | self.parser(mapping) for osi, mapping in json.items()]
+        records = [dict(OSI.create(osi).items()) | self.parser(mapping) for osi, mapping in json.items()]
         dataframe = pd.DataFrame.from_records(records)
         dataframe["instrument"] = Concepts.Instrument.OPTION
         return dataframe

@@ -9,7 +9,7 @@ Created on Sat May 16 2026
 import numpy as np
 from abc import ABC, abstractmethod
 
-from finance.variables import Alerting, Concepts
+# from finance.variables import Alerting, Concepts
 from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webpayloads import WebPayload
 from webscraping.weburl import WebURL
@@ -22,8 +22,8 @@ __license__ = "MIT License"
 
 
 cost_parser = lambda value: str(np.negative(value))
-tenure_parser = lambda tenure: {Concepts.Tenure.DAY: "day"}[tenure]
-term_parser = lambda term: {Concepts.Terms.LIMIT: "limit"}[term]
+tenure_parser = lambda tenure: {Concepts.Tenure.DAY: "day", Concepts.Tenure.GTC: "gtc", Concepts.Tenure.FOK: "fok"}[tenure]
+term_parser = lambda term: {Concepts.Terms.MARKET: "market", Concepts.Terms.LIMIT: "limit"}[term]
 position_parser = lambda tenure: {Concepts.Position.LONG: "buy", Concepts.Position.SHORT: "sell"}[tenure]
 quantity_parser = lambda value: str(abs(value))
 
