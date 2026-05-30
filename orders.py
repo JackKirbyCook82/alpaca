@@ -9,7 +9,7 @@ Created on Sat May 16 2026
 import numpy as np
 from abc import ABC, abstractmethod
 
-# from finance.variables import Alerting, Concepts
+from finance.variables import Alerting, Concepts
 from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webpayloads import WebPayload
 from webscraping.weburl import WebURL
