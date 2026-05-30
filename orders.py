@@ -9,7 +9,7 @@ Created on Sat May 16 2026
 import numpy as np
 from abc import ABC, abstractmethod
 
-from finance.variables import Alerting, Concepts
+from finance.variables import Alerting, Enumerations
 from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webpayloads import WebPayload
 from webscraping.weburl import WebURL
@@ -22,9 +22,9 @@ __license__ = "MIT License"
 
 
 cost_parser = lambda value: str(np.negative(value))
-tenure_parser = lambda tenure: {Concepts.Tenure.DAY: "day", Concepts.Tenure.GTC: "gtc", Concepts.Tenure.FOK: "fok"}[tenure]
-term_parser = lambda term: {Concepts.Terms.MARKET: "market", Concepts.Terms.LIMIT: "limit"}[term]
-position_parser = lambda tenure: {Concepts.Position.LONG: "buy", Concepts.Position.SHORT: "sell"}[tenure]
+tenure_parser = lambda tenure: {Enumerations.Tenure.DAY: "day", Enumerations.Tenure.GTC: "gtc", Enumerations.Tenure.FOK: "fok"}[tenure]
+term_parser = lambda term: {Enumerations.Terms.MARKET: "market", Enumerations.Terms.LIMIT: "limit"}[term]
+position_parser = lambda tenure: {Enumerations.Position.LONG: "buy", Enumerations.Position.SHORT: "sell"}[tenure]
 quantity_parser = lambda value: str(abs(value))
 
 
@@ -73,7 +73,7 @@ class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
     def uploader(self, spreads, *args, **kwargs):
         for spread in spreads:
             self.page(*args, spread=spread, **kwargs)
-            self.alert(spread, title="Uploaded", instrument=Concepts.Instrument.SPREAD)
+            self.alert(spread, title="Uploaded", instrument=Enumerations.Instrument.SPREAD)
 
 
 

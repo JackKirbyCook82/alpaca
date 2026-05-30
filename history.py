@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from datetime import timezone as Timezone
 from datetime import datetime as Datetime
 
-from finance.variables import Alerting, Concepts
+from finance.variables import Alerting, Enumerations
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
@@ -114,7 +114,7 @@ class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
         for tickers in tickers:
             bars = self.page(*args, tickers=tickers, **kwargs)
             if bool(bars.empty): continue
-            self.alert(bars, title="Downloaded", instrument=Concepts.Instrument.STOCK)
+            self.alert(bars, title="Downloaded", instrument=Enumerations.Instrument.STOCK)
             yield bars
 
 
