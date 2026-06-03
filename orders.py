@@ -23,7 +23,7 @@ __license__ = "MIT License"
 
 cost_parser = lambda value: str(np.negative(value))
 tenure_parser = lambda tenure: {Enumerations.Tenure.DAY: "day", Enumerations.Tenure.GTC: "gtc", Enumerations.Tenure.FOK: "fok"}[tenure]
-term_parser = lambda term: {Enumerations.Terms.MARKET: "market", Enumerations.Terms.LIMIT: "limit"}[term]
+term_parser = lambda term: {Enumerations.Terms.MARKET: "market", Enumerations.Terms.LIMIT: "limit", Enumerations.Terms.STOP: "stop"}[term]
 position_parser = lambda tenure: {Enumerations.Position.LONG: "buy", Enumerations.Position.SHORT: "sell"}[tenure]
 quantity_parser = lambda value: str(abs(value))
 
@@ -56,6 +56,11 @@ class AlpacaSpreadPage(AlpacaOrderPage):
         sources = dict(cost=spread.cost, tenure=tenure, term=term, securities=securities)
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
+
+        from pprint import pprint
+        pprint(payload)
+        raise Exception()
+
         self.load(url, payload=payload)
 
 
