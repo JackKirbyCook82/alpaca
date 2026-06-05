@@ -21,7 +21,7 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-cost_parser = lambda value: str(np.negative(value))
+cost_parser = lambda value: str(round(np.negative(value), 2))
 tenure_parser = lambda tenure: {Enumerations.Tenure.DAY: "day", Enumerations.Tenure.GTC: "gtc", Enumerations.Tenure.FOK: "fok"}[tenure]
 term_parser = lambda term: {Enumerations.Terms.MARKET: "market", Enumerations.Terms.LIMIT: "limit", Enumerations.Terms.STOP: "stop"}[term]
 position_parser = lambda tenure: {Enumerations.Position.LONG: "buy", Enumerations.Position.SHORT: "sell"}[tenure]
@@ -58,6 +58,7 @@ class AlpacaSpreadPage(AlpacaOrderPage):
         payload = AlpacaSpreadPayload(sources)
 
         from pprint import pprint
+        print(url)
         pprint(payload)
         raise Exception()
 
