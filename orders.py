@@ -21,10 +21,10 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-cost_parser = lambda value: str(round(np.negative(value), 2))
 tenure_parser = lambda tenure: {Enumerations.Tenure.DAY: "day", Enumerations.Tenure.GTC: "gtc", Enumerations.Tenure.FOK: "fok"}[tenure]
 term_parser = lambda term: {Enumerations.Terms.MARKET: "market", Enumerations.Terms.LIMIT: "limit", Enumerations.Terms.STOP: "stop"}[term]
 position_parser = lambda tenure: {Enumerations.Position.LONG: "buy", Enumerations.Position.SHORT: "sell"}[tenure]
+cost_parser = lambda value: f"{np.negative(value):.2f}"
 quantity_parser = lambda value: str(abs(value))
 
 
@@ -39,13 +39,13 @@ class AlpacaSpreadURL(AlpacaOrderURL, domain="https://paper-api.alpaca.markets",
 
 
 class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "extended_hours": False, "qty": "1"}):
-    class Cost(WebPayload.Text, key="cost", locator="limit_price", parser=cost_parser): pass
-    class Tenure(WebPayload.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
-    class Terms(WebPayload.Text, key="term", locator="type", parser=term_parser): pass
+    class Cost(WebPayload.Value, key="cost", locator="limit_price", parser=cost_parser): pass
+    class Tenure(WebPayload.Value, key="tenure", locator="time_in_force", parser=tenure_parser): pass
+    class Terms(WebPayload.Value, key="term", locator="type", parser=term_parser): pass
     class Legs(WebPayload.Mapping, key="securities", locator="legs", multiple=True):
-        class Osi(WebPayload.Text, key="osi", locator="symbol"): pass
-        class Position(WebPayload.Text, key="position", locator="side", parser=position_parser): pass
-        class Quantity(WebPayload.Text, key="quantity", locator="ratio_qty", parser=quantity_parser): pass
+        class Osi(WebPayload.Value, key="osi", locator="symbol"): pass
+        class Position(WebPayload.Value, key="position", locator="side", parser=position_parser): pass
+        class Quantity(WebPayload.Value, key="quantity", locator="ratio_qty", parser=quantity_parser): pass
 
 
 class AlpacaOrderPage(WebJSONPage, ABC): pass
@@ -60,7 +60,6 @@ class AlpacaSpreadPage(AlpacaOrderPage):
         from pprint import pprint
         print(url)
         pprint(payload)
-        raise Exception()
 
         self.load(url, payload=payload)
 
@@ -80,6 +79,8 @@ class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
         for spread in spreads:
             self.page(*args, spread=spread, **kwargs)
             self.alert(spread, title="Uploaded", instrument=Enumerations.Instrument.SPREAD)
+
+            raise Exception()
 
 
 
