@@ -38,7 +38,7 @@ class AlpacaSpreadURL(AlpacaOrderURL, domain="https://paper-api.alpaca.markets",
     pass
 
 
-class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "extended_hours": False, "qty": "1"}):
+class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "extended_hours": True, "qty": "1"}):
     class Cost(WebPayload.Value, key="cost", locator="limit_price", parser=cost_parser): pass
     class Tenure(WebPayload.Value, key="tenure", locator="time_in_force", parser=tenure_parser): pass
     class Terms(WebPayload.Value, key="term", locator="type", parser=term_parser): pass
