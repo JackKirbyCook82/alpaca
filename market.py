@@ -112,7 +112,7 @@ class AlpacaSecurityPage(AlpacaMarketPage):
         header = list(trades.columns) + [column for column in list(quotes.columns) if column not in list(trades.columns)]
         if "option" in header:
             on = [value if value != "option" else "key" for value in on]
-            trades["key"], quotes["key"] = str(trades["option"]), str(quotes["option"])
+            trades["key"], quotes["key"] = trades["option"].astype(str), quotes["option"].astype(str)
         dataframe = quotes.merge(trades, how="outer", on=list(on), sort=False, suffixes=("", "_"))[header]
         return dataframe
 
