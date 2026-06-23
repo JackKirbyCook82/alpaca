@@ -206,6 +206,8 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaStockPage):
         tickers = list({symbol.ticker for symbol in symbols})
         stocks = self.downloader(tickers, *args, **kwargs)
         stocks = pd.concat(list(stocks), axis=0)
+        stocks = stocks.sort_values(by=["ticker"], ascending=[True], inplace=False)
+        stocks = stocks.reset_index(drop=True, inplace=False)
         return stocks
 
     def downloader(self, tickers, *args, **kwargs):
@@ -241,6 +243,9 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
         assert isinstance(contracts, list)
         options = self.downloader(contracts, *args, **kwargs)
         options = pd.concat(list(options), axis=0)
+        key = lambda series: series.map(str) if series.name == "option" else series
+        options = options.sort_values(by=["ticker", "expire", "option", "strike"], ascending=[True, True, True, True], inplace=False, key=key)
+        options = options.reset_index(drop=True, inplace=False)
         return options
 
     def downloader(self, contracts, *args, **kwargs):

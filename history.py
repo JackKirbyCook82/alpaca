@@ -107,6 +107,7 @@ class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
         bars = pd.concat(list(bars), axis=0)
         bars["date"] = pd.to_datetime(bars["date"])
         bars = bars.sort_values(by=["ticker", "date"], ascending=[True, False], inplace=False)
+        bars = bars.reset_index(drop=True, inplace=False)
         return bars
 
     def downloader(self, tickers, *args, **kwargs):
