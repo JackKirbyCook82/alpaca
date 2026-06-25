@@ -12,11 +12,12 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from datetime import datetime as Datetime
 
-from finance.variables import Alerting, Enumerations, Querys, OSI
+from finance.variables import Enumerations, Querys
+from finance.logging import Logging
+from finance.osi import OSI
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
-from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -194,13 +195,12 @@ class AlpacaOptionPage(AlpacaSecurityPage):
         return dataframe
 
 
-class AlpacaMarketDownloader(WebStream, ABC):
+class AlpacaMarketDownloader(WebStream, Logging, ABC):
     @abstractmethod
     def downloader(self, *args, **kwargs): pass
 
 
-class AlpacaSecurityDownloader(AlpacaMarketDownloader, Alerting, ABC): pass
-class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaStockPage):
+class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
     def __call__(self, symbols, *args, **kwargs):
         assert isinstance(symbols, list)
         tickers = list({symbol.ticker for symbol in symbols})
@@ -215,11 +215,11 @@ class AlpacaStockDownloader(AlpacaSecurityDownloader, page=AlpacaStockPage):
         for tickers in tickers:
             stocks = self.page(*args, tickers=tickers, **kwargs)
             if bool(stocks.empty): continue
-            self.alert(stocks, title="Downloaded", instrument=Enumerations.Instrument.STOCK)
+            self.results(stocks, title="Downloaded", instrument=Enumerations.Instrument.STOCK)
             yield stocks
 
 
-class AlpacaContractDownloader(AlpacaMarketDownloader, Logging, page=AlpacaContractPage):
+class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
     def __call__(self, symbols, *args, **kwargs):
         assert isinstance(symbols, list)
         tickers = list({symbol.ticker for symbol in symbols})
@@ -231,14 +231,11 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, Logging, page=AlpacaContr
     def downloader(self, tickers, *args, **kwargs):
         for ticker in tickers:
             contracts = self.page(*args, ticker=ticker, **kwargs)
-            self.alert(ticker, len(contracts))
+            self.results(contracts, title="Downloaded", instrument=Enumerations.Instrument.CONTRACT)
             for contract in contracts: yield contract
 
-    def alert(self, ticker, size):
-        self.console("Downloaded", f"Contracts[{str(ticker)}, {int(size):.0f}]")
 
-
-class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
+class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
     def __call__(self, contracts, *args, **kwargs):
         assert isinstance(contracts, list)
         options = self.downloader(contracts, *args, **kwargs)
@@ -253,7 +250,7 @@ class AlpacaOptionDownloader(AlpacaSecurityDownloader, page=AlpacaOptionPage):
         for contracts in contracts:
             options = self.page(*args, contracts=contracts, **kwargs)
             if bool(options.empty): continue
-            self.alert(options, title="Downloaded", instrument=Enumerations.Instrument.OPTION)
+            self.results(options, title="Downloaded", instrument=Enumerations.Instrument.OPTION)
             yield options
 
 

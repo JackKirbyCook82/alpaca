@@ -9,7 +9,8 @@ Created on Sat May 16 2026
 import numpy as np
 from abc import ABC, abstractmethod
 
-from finance.variables import Alerting, Enumerations
+from finance.variables import Enumerations
+from finance.logging import Logging
 from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webpayloads import WebPayload
 from webscraping.weburl import WebURL
@@ -64,7 +65,7 @@ class AlpacaSpreadPage(AlpacaOrderPage):
         self.load(url, payload=payload)
 
 
-class AlpacaOrderUploader(WebStream, Alerting, ABC):
+class AlpacaOrderUploader(WebStream, Logging, ABC):
     @abstractmethod
     def uploader(self, *args, **kwargs): pass
 
@@ -78,7 +79,7 @@ class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
     def uploader(self, spreads, *args, **kwargs):
         for spread in spreads:
             self.page(*args, spread=spread, **kwargs)
-            self.alert(spread, title="Uploaded", instrument=Enumerations.Instrument.SPREAD)
+            self.console(spread, title="Uploaded", instrument=Enumerations.Instrument.SPREAD)
 
             raise Exception()
 
