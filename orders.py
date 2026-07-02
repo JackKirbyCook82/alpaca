@@ -6,6 +6,7 @@ Created on Sat May 16 2026
 
 """
 
+from pprint import pformat
 from abc import ABC, abstractmethod
 
 from finance.variables import Enumerations
@@ -52,6 +53,10 @@ class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "q
 
 class AlpacaOrderPage(WebJSONPage, ABC): pass
 class AlpacaSpreadPage(AlpacaOrderPage):
+    def __init__(self, *args, uploading=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__uploading = bool(uploading)
+
     def __call__(self, *args, spread, tenure, term, **kwargs):
         keys = ["osi", "position", "intent", "quantity"]
         records = zip(spread.osi, spread.position, spread.position, spread.quantity)
@@ -59,13 +64,11 @@ class AlpacaSpreadPage(AlpacaOrderPage):
         sources = dict(cost=spread.cost, tenure=tenure, term=term, securities=securities)
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
+        if self.uploading: self.load(url, payload=payload)
+        else: print("\033[31m" + pformat(url) + "\n" + pformat(payload) + "\033[0m")
 
-        from pprint import pprint
-        print(url)
-        pprint(payload)
-        return
-
-        self.load(url, payload=payload)
+    @property
+    def uploading(self): return self.__uploading
 
 
 class AlpacaOrderUploader(WebStream, Logging, ABC):
