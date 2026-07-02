@@ -80,7 +80,9 @@ class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
         self.uploader(spreads, *args, **kwargs)
 
     def uploader(self, spreads, *args, **kwargs):
-        for spread in spreads: self.page(*args, spread=spread, **kwargs)
+        for spread in spreads:
+            self.page(*args, spread=spread, **kwargs)
+            self.console("Updated", f"Spread[{str(spread)}]")
         self.results(spreads, title="Uploaded", instrument=Enumerations.Instrument.SPREAD)
 
 
