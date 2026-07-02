@@ -59,6 +59,12 @@ class AlpacaSpreadPage(AlpacaOrderPage):
         sources = dict(cost=spread.cost, tenure=tenure, term=term, securities=securities)
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
+
+        from pprint import pprint
+        print(url)
+        pprint(payload)
+        return
+
         self.load(url, payload=payload)
 
 
