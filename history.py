@@ -96,8 +96,14 @@ class AlpacaBarsPage(AlpacaHistoryPage):
 
 
 class AlpacaHistoryDownloader(WebStream, Logging, ABC):
+    def __init__(self, *args, uploading=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__uploading = bool(uploading)
+
     @abstractmethod
     def downloader(self, *args, **kwargs): pass
+    @property
+    def downloading(self): return self.__downloading
 
 
 class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
@@ -113,8 +119,9 @@ class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
 
     def downloader(self, tickers, *args, **kwargs):
         tickers = [tickers[index:index+self.capacity] for index in range(0, len(tickers), self.capacity)]
+        parameters = dict(downloading=self.downloading)
         for tickers in tickers:
-            bars = self.page(*args, tickers=tickers, **kwargs)
+            bars = self.page(*args, tickers=tickers, **parameters, **kwargs)
             if bool(bars.empty): continue
             self.results(bars, title="Downloaded", instrument=Enumerations.Instrument.STOCK)
             yield bars

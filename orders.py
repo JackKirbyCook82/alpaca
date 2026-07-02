@@ -53,42 +53,49 @@ class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "q
 
 class AlpacaOrderPage(WebJSONPage, ABC): pass
 class AlpacaSpreadPage(AlpacaOrderPage):
-    def __init__(self, *args, uploading=True, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__uploading = bool(uploading)
-
-    def __call__(self, *args, spread, tenure, term, **kwargs):
-        keys = ["osi", "position", "intent", "quantity"]
-        records = zip(spread.osi, spread.position, spread.position, spread.quantity)
-        securities = [dict(zip(keys, values)) for values in records]
+    def __call__(self, *args, spread, tenure, term, uploading=False, **kwargs):
+        securities = [{"osi": record.osi, "position": record.position, "intent": record.position, "quantity": record.quantity} for record in spread.records]
         sources = dict(cost=spread.cost, tenure=tenure, term=term, securities=securities)
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
-        if self.uploading: self.load(url, payload=payload)
+        if bool(uploading): self.load(url, payload=payload)
         else: print("\033[31m" + pformat(url) + "\n" + pformat(payload) + "\033[0m")
-
-    @property
-    def uploading(self): return self.__uploading
 
 
 class AlpacaOrderUploader(WebStream, Logging, ABC):
+    def __init__(self, *args, uploading=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__uploading = bool(uploading)
+        self.__uploaded = set()
+
     @abstractmethod
     def uploader(self, *args, **kwargs): pass
+
+    @property
+    def uploading(self): return self.__uploading
+    @property
+    def uploaded(self): return self.__uploaded
 
 
 class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
     def __call__(self, spreads, *args, **kwargs):
         assert isinstance(spreads, list)
         if not bool(spreads): return
-        self.uploader(spreads, *args, **kwargs)
+        uploadable = list()
+        for spread in spreads:
+            if spread.signature in self.uploaded: continue
+            self.uploaded.add(spread.signature)
+            uploadable.append(spread.signature)
+        self.uploader(uploadable, *args, **kwargs)
 
     def uploader(self, spreads, *args, **kwargs):
+        parameters = dict(uploading=self.uploading)
         for spread in spreads:
-            self.page(*args, spread=spread, **kwargs)
-            self.console("Updated", f"Spread[{', '.join(spread.osi)}]")
+            self.page(*args, spread=spread, **parameters, **kwargs)
+            securities = [f"{str(record.osi)}|{int(record.position) * int(record.quantity):.0f}" for record in spread.records]
+            self.console("Updated", f"Spread[{', '.join(securities)}]")
             self.console("Updated", f"Spread[Tight={spread.tightness:.2f}, Money={spread.moneyness:.2f}, Active={spread.activity:.2f}]")
         self.results(spreads, title="Uploaded", instrument=Enumerations.Instrument.SPREAD)
-
 
 
 

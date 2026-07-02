@@ -196,8 +196,14 @@ class AlpacaOptionPage(AlpacaSecurityPage):
 
 
 class AlpacaMarketDownloader(WebStream, Logging, ABC):
+    def __init__(self, *args, uploading=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__uploading = bool(uploading)
+
     @abstractmethod
     def downloader(self, *args, **kwargs): pass
+    @property
+    def downloading(self): return self.__downloading
 
 
 class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
@@ -212,8 +218,9 @@ class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
 
     def downloader(self, tickers, *args, **kwargs):
         tickers = [tickers[index:index+self.capacity] for index in range(0, len(tickers), self.capacity)]
+        parameters = dict(downloading=self.downloading)
         for tickers in tickers:
-            stocks = self.page(*args, tickers=tickers, **kwargs)
+            stocks = self.page(*args, tickers=tickers, **parameters, **kwargs)
             if bool(stocks.empty): continue
             self.results(stocks, title="Downloaded", instrument=Enumerations.Instrument.STOCK)
             yield stocks
@@ -229,8 +236,9 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
         return contracts
 
     def downloader(self, tickers, *args, **kwargs):
+        parameters = dict(downloading=self.downloading)
         for ticker in tickers:
-            contracts = self.page(*args, ticker=ticker, **kwargs)
+            contracts = self.page(*args, ticker=ticker, **parameters, **kwargs)
             self.results(contracts, title="Downloaded", instrument=Enumerations.Instrument.CONTRACT)
             for contract in contracts: yield contract
 
@@ -247,8 +255,9 @@ class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
 
     def downloader(self, contracts, *args, **kwargs):
         contracts = [contracts[index:index+self.capacity] for index in range(0, len(contracts), self.capacity)]
+        parameters = dict(downloading=self.downloading)
         for contracts in contracts:
-            options = self.page(*args, contracts=contracts, **kwargs)
+            options = self.page(*args, contracts=contracts, **parameters, **kwargs)
             if bool(options.empty): continue
             self.results(options, title="Downloaded", instrument=Enumerations.Instrument.OPTION)
             yield options
