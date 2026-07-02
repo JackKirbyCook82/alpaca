@@ -85,7 +85,8 @@ class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
     def uploader(self, spreads, *args, **kwargs):
         for spread in spreads:
             self.page(*args, spread=spread, **kwargs)
-            self.console("Updated", f"Spread[{str(spread)}]")
+            self.console("Updated", f"Spread[{', '.join(spread.osi)}]")
+            self.console("Updated", f"Spread[Tight={spread.tightness:.2f}, Money={spread.moneyness:.2f}, Active={spread.activity:.2f}]")
         self.results(spreads, title="Uploaded", instrument=Enumerations.Instrument.SPREAD)
 
 
