@@ -96,9 +96,9 @@ class AlpacaBarsPage(AlpacaHistoryPage):
 
 
 class AlpacaHistoryDownloader(WebStream, Logging, ABC):
-    def __init__(self, *args, uploading=True, **kwargs):
+    def __init__(self, *args, downloading=True, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__uploading = bool(uploading)
+        self.__downloading = bool(downloading)
 
     @abstractmethod
     def downloader(self, *args, **kwargs): pass

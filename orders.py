@@ -59,7 +59,7 @@ class AlpacaSpreadPage(AlpacaOrderPage):
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
         if bool(uploading): self.load(url, payload=payload)
-        else: print("\033[31m" + pformat(url) + "\n" + pformat(payload) + "\033[0m")
+        else: print("\033[31m" + pformat(str(url)) + "\n" + pformat(payload) + "\033[0m")
 
 
 class AlpacaOrderUploader(WebStream, Logging, ABC):
@@ -81,18 +81,21 @@ class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
     def __call__(self, spreads, *args, **kwargs):
         assert isinstance(spreads, list)
         if not bool(spreads): return
+        self.uploader(spreads, *args, **kwargs)
+
         uploadable = list()
         for spread in spreads:
             if spread.signature in self.uploaded: continue
             self.uploaded.add(spread.signature)
-            uploadable.append(spread.signature)
-        self.uploader(uploadable, *args, **kwargs)
+            uploadable.append(spread)
+        if uploadable:
+            self.uploader(uploadable, *args, **kwargs)
 
     def uploader(self, spreads, *args, **kwargs):
         parameters = dict(uploading=self.uploading)
         for spread in spreads:
             self.page(*args, spread=spread, **parameters, **kwargs)
-            securities = [f"{str(record.osi)}|{int(record.position) * int(record.quantity):.0f}" for record in spread.records]
+            securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in spread.records]
             self.console("Updated", f"Spread[{', '.join(securities)}]")
             self.console("Updated", f"Spread[Tight={spread.tightness:.2f}, Money={spread.moneyness:.2f}, Active={spread.activity:.2f}]")
         self.results(spreads, title="Uploaded", instrument=Enumerations.Instrument.SPREAD)
