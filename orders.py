@@ -6,7 +6,7 @@ Created on Sat May 16 2026
 
 """
 
-from pathlib import Path
+import multiprocessing
 from pprint import pformat
 from abc import ABC, abstractmethod
 
@@ -54,53 +54,51 @@ class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "q
 
 class AlpacaOrderPage(WebJSONPage, ABC): pass
 class AlpacaSpreadPage(AlpacaOrderPage):
-    def __call__(self, *args, spread, tenure, term, intent, uploading=False, **kwargs):
+    def __call__(self, *args, spread, tenure, term, intent, **kwargs):
         securities = [{"osi": record.osi, "position": record.position, "intent": (record.postion, intent), "quantity": record.quantity} for record in spread.records]
         sources = dict(cost=spread.cost, tenure=tenure, term=term, securities=securities)
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
-        if bool(uploading): self.load(url, payload=payload)
+        if not bool(self.safemode): self.load(url, payload=payload)
         else: print("\033[31m" + pformat(str(url)) + "\n" + pformat(payload) + "\033[0m")
 
 
 class AlpacaOrderUploader(WebStream, Logging, ABC):
-    def __init__(self, *args, file, uploading=False, **kwargs):
-
-
-
-
+    def __init__(self, *args, file, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__uploading = bool(uploading)
-        self.__uploaded = set()
+        self.__mutex = multiprocessing.Lock()
+        self.__history = set()
         self.__file = file
 
     @abstractmethod
     def uploader(self, *args, **kwargs): pass
 
     @property
-    def uploading(self): return self.__uploading
+    def history(self): return self.__history
     @property
-    def uploaded(self): return self.__uploaded
+    def mutex(self): return self.__mutex
+    @property
+    def file(self): return self.__file
 
 
 class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
-    def __call__(self, spreads, *args, **kwargs):
+    def __call__(self, spreads, /, **kwargs):
         assert isinstance(spreads, list)
         if not bool(spreads): return
-        self.uploader(spreads, *args, **kwargs)
+        generator = self.generator(spreads, **kwargs)
+        spreads = list(generator)
+        if not bool(spreads): return
+        self.uploader(spreads, **kwargs)
 
-        uploadable = list()
+    def generator(self, spreads, /, **kwargs):
         for spread in spreads:
-            if spread.signature in self.uploaded: continue
-            self.uploaded.add(spread.signature)
-            uploadable.append(spread)
-        if uploadable:
-            self.uploader(uploadable, *args, **kwargs)
+            if spread.signature in self.history: continue
+            with self.mutex: self.history.add(spread.signature)
+            yield spread
 
-    def uploader(self, spreads, *args, **kwargs):
-        parameters = dict(uploading=self.uploading)
+    def uploader(self, spreads, /, **kwargs):
         for spread in spreads:
-            self.page(*args, spread=spread, **parameters, **kwargs)
+            self.page(spread=spread, **kwargs)
             securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in spread.records]
             self.console("Updated", f"Spread[{', '.join(securities)}]")
             self.console("Updated", f"Spread[Tight={spread.tightness:.2f}, Money={spread.moneyness:.2f}, Active={spread.activity:.2f}]")

@@ -196,68 +196,59 @@ class AlpacaOptionPage(AlpacaSecurityPage):
 
 
 class AlpacaMarketDownloader(WebStream, Logging, ABC):
-    def __init__(self, *args, downloading=True, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__downloading = bool(downloading)
-
     @abstractmethod
     def downloader(self, *args, **kwargs): pass
-    @property
-    def downloading(self): return self.__downloading
 
 
 class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
-    def __call__(self, symbols, *args, **kwargs):
+    def __call__(self, symbols, /, **kwargs):
         assert isinstance(symbols, list)
         tickers = list({symbol.ticker for symbol in symbols})
-        stocks = self.downloader(tickers, *args, **kwargs)
+        stocks = self.downloader(tickers, **kwargs)
         stocks = pd.concat(list(stocks), axis=0)
         stocks = stocks.sort_values(by=["ticker"], ascending=[True], inplace=False)
         stocks = stocks.reset_index(drop=True, inplace=False)
         return stocks
 
-    def downloader(self, tickers, *args, **kwargs):
+    def downloader(self, tickers, /, **kwargs):
         tickers = [tickers[index:index+self.capacity] for index in range(0, len(tickers), self.capacity)]
-        parameters = dict(downloading=self.downloading)
         for tickers in tickers:
-            stocks = self.page(*args, tickers=tickers, **parameters, **kwargs)
+            stocks = self.page(tickers=tickers, **kwargs)
             if bool(stocks.empty): continue
             self.results(stocks, title="Downloaded", instrument=Enumerations.Instrument.STOCK)
             yield stocks
 
 
 class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
-    def __call__(self, symbols, *args, **kwargs):
+    def __call__(self, symbols, /, **kwargs):
         assert isinstance(symbols, list)
         tickers = list({symbol.ticker for symbol in symbols})
-        contracts = self.downloader(tickers, *args, **kwargs)
+        contracts = self.downloader(tickers, **kwargs)
         contracts = list(contracts)
         contracts.sort(key=lambda contract: (contract.ticker, contract.expire))
         return contracts
 
-    def downloader(self, tickers, *args, **kwargs):
-        parameters = dict(downloading=self.downloading)
+    def downloader(self, tickers, /, **kwargs):
         for ticker in tickers:
-            contracts = self.page(*args, ticker=ticker, **parameters, **kwargs)
+            contracts = self.page(ticker=ticker, **kwargs)
             self.results(contracts, title="Downloaded", instrument=Enumerations.Instrument.CONTRACT)
             for contract in contracts: yield contract
 
 
 class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
-    def __call__(self, contracts, *args, **kwargs):
+    def __call__(self, contracts, /, **kwargs):
         assert isinstance(contracts, list)
-        options = self.downloader(contracts, *args, **kwargs)
+        options = self.downloader(contracts, **kwargs)
         options = pd.concat(list(options), axis=0)
         key = lambda series: series.map(str) if series.name == "option" else series
         options = options.sort_values(by=["ticker", "expire", "option", "strike"], ascending=[True, True, True, True], inplace=False, key=key)
         options = options.reset_index(drop=True, inplace=False)
         return options
 
-    def downloader(self, contracts, *args, **kwargs):
+    def downloader(self, contracts, /, **kwargs):
         contracts = [contracts[index:index+self.capacity] for index in range(0, len(contracts), self.capacity)]
-        parameters = dict(downloading=self.downloading)
         for contracts in contracts:
-            options = self.page(*args, contracts=contracts, **parameters, **kwargs)
+            options = self.page(contracts=contracts, **kwargs)
             if bool(options.empty): continue
             self.results(options, title="Downloaded", instrument=Enumerations.Instrument.OPTION)
             yield options

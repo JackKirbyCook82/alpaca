@@ -96,32 +96,25 @@ class AlpacaBarsPage(AlpacaHistoryPage):
 
 
 class AlpacaHistoryDownloader(WebStream, Logging, ABC):
-    def __init__(self, *args, downloading=True, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__downloading = bool(downloading)
-
     @abstractmethod
     def downloader(self, *args, **kwargs): pass
-    @property
-    def downloading(self): return self.__downloading
 
 
 class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
-    def __call__(self, symbols, *args, **kwargs):
+    def __call__(self, symbols, /, **kwargs):
         assert isinstance(symbols, list)
         tickers = list({symbol.ticker for symbol in symbols})
-        bars = self.downloader(tickers, *args, **kwargs)
+        bars = self.downloader(tickers, **kwargs)
         bars = pd.concat(list(bars), axis=0)
         bars["date"] = pd.to_datetime(bars["date"])
         bars = bars.sort_values(by=["ticker", "date"], ascending=[True, False], inplace=False)
         bars = bars.reset_index(drop=True, inplace=False)
         return bars
 
-    def downloader(self, tickers, *args, **kwargs):
+    def downloader(self, tickers, /, **kwargs):
         tickers = [tickers[index:index+self.capacity] for index in range(0, len(tickers), self.capacity)]
-        parameters = dict(downloading=self.downloading)
         for tickers in tickers:
-            bars = self.page(*args, tickers=tickers, **parameters, **kwargs)
+            bars = self.page(tickers=tickers, **kwargs)
             if bool(bars.empty): continue
             self.results(bars, title="Downloaded", instrument=Enumerations.Instrument.STOCK)
             yield bars
