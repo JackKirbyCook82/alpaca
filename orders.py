@@ -6,6 +6,7 @@ Created on Sat May 16 2026
 
 """
 
+from pathlib import Path
 from pprint import pformat
 from abc import ABC, abstractmethod
 
@@ -25,6 +26,7 @@ __license__ = "MIT License"
 tenure_parser = lambda tenure: {Enumerations.Tenure.DAY: "day", Enumerations.Tenure.GTC: "gtc", Enumerations.Tenure.FOK: "fok"}[tenure]
 term_parser = lambda term: {Enumerations.Terms.MARKET: "market", Enumerations.Terms.LIMIT: "limit", Enumerations.Terms.STOP: "stop"}[term]
 position_parser = lambda position: {Enumerations.Position.LONG: "buy", Enumerations.Position.SHORT: "sell"}[position]
+intent_parser = lambda position, intent: str(position_parser[position]) + "to" + str(intent)
 quantity_parser = lambda value: str(abs(value))
 cost_parser = lambda value: f"{value:.2f}"
 
@@ -45,14 +47,15 @@ class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "q
     class Terms(WebPayload.Value, key="term", locator="type", parser=term_parser): pass
     class Legs(WebPayload.Mapping, key="securities", locator="legs", multiple=True):
         class Osi(WebPayload.Value, key="osi", locator="symbol"): pass
+        class Intent(WebPayload.Value, key="intent", locator="position_intent", parser=intent_parser): pass
         class Position(WebPayload.Value, key="position", locator="side", parser=position_parser): pass
         class Quantity(WebPayload.Value, key="quantity", locator="ratio_qty", parser=quantity_parser): pass
 
 
 class AlpacaOrderPage(WebJSONPage, ABC): pass
 class AlpacaSpreadPage(AlpacaOrderPage):
-    def __call__(self, *args, spread, tenure, term, uploading=False, **kwargs):
-        securities = [{"osi": record.osi, "position": record.position, "quantity": record.quantity} for record in spread.records]
+    def __call__(self, *args, spread, tenure, term, intent, uploading=False, **kwargs):
+        securities = [{"osi": record.osi, "position": record.position, "intent": (record.postion, intent), "quantity": record.quantity} for record in spread.records]
         sources = dict(cost=spread.cost, tenure=tenure, term=term, securities=securities)
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
@@ -61,10 +64,15 @@ class AlpacaSpreadPage(AlpacaOrderPage):
 
 
 class AlpacaOrderUploader(WebStream, Logging, ABC):
-    def __init__(self, *args, uploading=False, **kwargs):
+    def __init__(self, *args, file, uploading=False, **kwargs):
+
+
+
+
         super().__init__(*args, **kwargs)
         self.__uploading = bool(uploading)
         self.__uploaded = set()
+        self.__file = file
 
     @abstractmethod
     def uploader(self, *args, **kwargs): pass
