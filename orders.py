@@ -7,13 +7,18 @@ Created on Sat May 16 2026
 """
 
 import multiprocessing
+import pandas as pd
+from parse import parse
 from pprint import pformat
 from abc import ABC, abstractmethod
 
 from finance.variables import Enumerations
 from finance.logging import Logging
+from finance.osi import OSI
+from support.custom import ReversibleDict as RDict
 from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webpayloads import WebPayload
+from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 
 __version__ = "1.0.0"
@@ -23,12 +28,29 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-tenure_parser = lambda tenure: {Enumerations.Tenure.DAY: "day", Enumerations.Tenure.GTC: "gtc", Enumerations.Tenure.FOK: "fok"}[tenure]
-term_parser = lambda term: {Enumerations.Terms.MARKET: "market", Enumerations.Terms.LIMIT: "limit", Enumerations.Terms.STOP: "stop"}[term]
-position_parser = lambda position: {Enumerations.Position.LONG: "buy", Enumerations.Position.SHORT: "sell"}[position]
-intent_parser = lambda position, intent: str(position_parser[position]) + "to" + str(intent)
-quantity_parser = lambda value: str(abs(value))
-cost_parser = lambda value: f"{value:.2f}"
+tenure_mapping = RDict({Enumerations.Tenure.DAY: "day", Enumerations.Tenure.GTC: "gtc", Enumerations.Tenure.FOK: "fok"})
+term_mapping = RDict({Enumerations.Terms.MARKET: "market", Enumerations.Terms.LIMIT: "limit", Enumerations.Terms.STOP: "stop"})
+position_mapping = RDict({Enumerations.Position.LONG: "buy", Enumerations.Position.SHORT: "sell"})
+intent_mapping = RDict({Enumerations.Intent.OPEN: "open", Enumerations.Intent.CLOSE: "close"})
+
+intent_formatter = lambda position, intent: f"{position[position, False]}_to_{intent_mapping[intent, False]}"
+position_formatter = lambda position: position_mapping[position, False]
+tenure_formatter = lambda tenure: tenure_mapping[tenure, False]
+term_formatter = lambda term: intent_mapping[term, False]
+quantity_formatter = lambda quantity: f"{quantity:.0f}"
+cost_formatter = lambda cost: f"{cost:.2f}"
+
+timestamp_parser = lambda string: pd.to_datetime(string)
+ticker_parser = lambda string: OSI.parse(string).ticker
+expire_parser = lambda string: OSI.parse(string).expire
+option_parser = lambda string: OSI.parse(string).option
+strike_parser = lambda string: OSI.parse(string).strike
+intent_parser = lambda string: intent_mapping[parse("{position}_to_{intent}", string)["intent"], True]
+position_parser = lambda string: position_mapping[string, True]
+tenure_parser = lambda string: tenure_mapping[string, True]
+term_parser = lambda string: term_mapping[string, True]
+quantity_parser = lambda string: int(string)
+cost_parser = lambda string: float(string)
 
 
 class AlpacaOrderURL(WebURL, headers={"accept": "application/json", "content-type": "application/json"}):
@@ -41,15 +63,32 @@ class AlpacaSpreadURL(AlpacaOrderURL, domain="https://paper-api.alpaca.markets",
     pass
 
 
-class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "qty": "1"}):
-    class Cost(WebPayload.Value, key="cost", locator="limit_price", parser=cost_parser): pass
-    class Tenure(WebPayload.Value, key="tenure", locator="time_in_force", parser=tenure_parser): pass
-    class Terms(WebPayload.Value, key="term", locator="type", parser=term_parser): pass
-    class Legs(WebPayload.Mapping, key="securities", locator="legs", multiple=True):
+class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "qty": "1"}, multiple=False, optional=False):
+    class Cost(WebPayload.Value, key="cost", locator="limit_price", parser=cost_formatter): pass
+    class Tenure(WebPayload.Value, key="tenure", locator="time_in_force", parser=tenure_formatter): pass
+    class Terms(WebPayload.Value, key="term", locator="type", parser=term_formatter): pass
+    class Legs(WebPayload.Mapping, key="securities", locator="legs", multiple=True, optional=False):
         class Osi(WebPayload.Value, key="osi", locator="symbol"): pass
-        class Intent(WebPayload.Value, key="intent", locator="position_intent", parser=intent_parser): pass
-        class Position(WebPayload.Value, key="position", locator="side", parser=position_parser): pass
-        class Quantity(WebPayload.Value, key="quantity", locator="ratio_qty", parser=quantity_parser): pass
+        class Intent(WebPayload.Value, key="intent", locator="position_intent", parser=intent_formatter): pass
+        class Position(WebPayload.Value, key="position", locator="side", parser=position_formatter): pass
+        class Quantity(WebPayload.Value, key="quantity", locator="ratio_qty", parser=quantity_formatter): pass
+
+
+class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
+    class Group(WebJSON.Text, key="group", locator="id", parser=str): pass
+    class Time(WebJSON.Text, key="time", locator="created_at", parser=timestamp_parser): pass
+    class Status(WebJSON.Text, key="status", locator="status", parser=Enumerations.Status): pass
+    class Tenure(WebJSON.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
+    class Term(WebJSON.Text, key="term", locator="type", parser=term_parser): pass
+    class Cost(WebJSON.Text, key="cost", locator="limit_price", parser=float): pass
+    class Security(WebJSON.Mapping, key="security", locator="legs", parser=dict, multiple=True, optional=False):
+        class Individual(WebJSON.Text, key="individual", locator="id", parser=str): pass
+        class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
+        class Expire(WebJSON.Text, key="expire", locator="expire", parser=expire_parser): pass
+        class Option(WebJSON.Text, key="option", locator="option", parser=option_parser): pass
+        class Strike(WebJSON.Text, key="strike", locator="strike", parser=strike_parser): pass
+        class Position(WebJSON.Text, key="position", locator="side", parser=position_parser): pass
+        class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=int): pass
 
 
 class AlpacaOrderPage(WebJSONPage, ABC): pass
@@ -59,12 +98,14 @@ class AlpacaSpreadPage(AlpacaOrderPage):
         sources = dict(cost=spread.cost, tenure=tenure, term=term, securities=securities)
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
-        if not bool(self.safemode): self.load(url, payload=payload)
-        else: print("\033[31m" + pformat(str(url)) + "\n" + pformat(payload) + "\033[0m")
+
+#        if not bool(self.safemode): self.load(url, payload=payload)
+#        else: print("\033[31m" + pformat(str(url)) + "\n" + pformat(payload) + "\033[0m")
 
 
 class AlpacaOrderUploader(WebStream, Logging, ABC):
     def __init__(self, *args, file, **kwargs):
+        if not file.exists(): raise FileNotFoundError(file)
         super().__init__(*args, **kwargs)
         self.__mutex = multiprocessing.Lock()
         self.__history = set()

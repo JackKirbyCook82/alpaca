@@ -10,8 +10,6 @@ import numpy as np
 import pandas as pd
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from datetime import timezone as Timezone
-from datetime import datetime as Datetime
 
 from finance.variables import Enumerations
 from finance.logging import Logging
@@ -27,7 +25,7 @@ __license__ = "MIT License"
 
 
 pagination_parser = lambda string: str(string) if string != "None" else None
-history_parser = lambda string: Datetime.strptime(string, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=Timezone.utc).date()
+history_parser = lambda string: pd.to_datetime(string, utc=True).date()
 
 
 class AlpacaHistoryURL(WebURL, headers={"accept": "application/json"}):
@@ -58,7 +56,7 @@ class AlpacaBarsURL(AlpacaHistoryURL, domain="https://data.alpaca.markets", path
 
 
 class AlpacaHistoryData(WebJSON, multiple=False, optional=False):
-    class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=pagination_parser, multiple=False, optional=True): pass
+    class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=pagination_parser, optional=True): pass
 
 
 @dataclass(frozen=True)

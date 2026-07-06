@@ -28,7 +28,7 @@ __license__ = "MIT License"
 
 pagination_parser = lambda string: str(string) if string != "None" else None
 expire_parser = lambda string: Datetime.strptime(string, "%Y-%m-%d").date()
-strike_parser = lambda content: np.round(float(content), 2)
+strike_parser = lambda string: np.round(float(string), 2)
 
 
 class AlpacaMarketURL(WebURL, headers={"accept": "application/json"}):
@@ -83,9 +83,9 @@ class AlpacaContractURL(AlpacaMarketURL, domain="https://paper-api.alpaca.market
         else: return {}
 
 
-class AlpacaContractData(WebJSON, multiple=False, optional=False):
-    class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=pagination_parser, multiple=False, optional=True): pass
-    class Contracts(WebJSON, key="contracts", locator="//option_contracts[]", parser=Querys.Contract, multiple=True, optional=True):
+class AlpacaContractData(WebJSON.Mapping, multiple=False, optional=False):
+    class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=pagination_parser, optional=True): pass
+    class Contracts(WebJSON.Mapping, key="contracts", locator="//option_contracts[]", parser=Querys.Contract, multiple=True, optional=True):
         class Ticker(WebJSON.Text, key="ticker", locator="//underlying_symbol", parser=str): pass
         class Expire(WebJSON.Text, key="expire", locator="//expiration_date", parser=expire_parser): pass
         class Option(WebJSON.Text, key="option", locator="//type", parser=Enumerations.Option): pass
