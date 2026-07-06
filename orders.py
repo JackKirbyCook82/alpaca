@@ -22,7 +22,7 @@ from webscraping.weburl import WebURL
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["AlpacaSpreadUploader"]
+__all__ = ["AlpacaSpreadUploader", "AlpacaOrders"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -51,6 +51,7 @@ term_parser = lambda string: term_mapping[string, True]
 quantity_parser = lambda string: int(string)
 
 
+AlpacaOrders = ["group", "timestamp", "status", "tenure", "term", "identity", "ticker", "expire", "option", "strike", "position", "quantity"]
 class AlpacaOrderURL(WebURL, headers={"accept": "application/json", "content-type": "application/json"}):
     @staticmethod
     def headers(*args, authenticator, **kwargs):
@@ -79,7 +80,7 @@ class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
     class Tenure(WebJSON.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
     class Term(WebJSON.Text, key="term", locator="type", parser=term_parser): pass
     class Securities(WebJSON.Mapping, key="securities", locator="legs", parser=dict, multiple=True, optional=False):
-        class Identity(WebJSON.Text, key="identity", locator="id", parser=str): pass
+        class Identity(WebJSON.Text, key="identity", locator="asset_id", parser=str): pass
         class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
         class Expire(WebJSON.Text, key="expire", locator="expire", parser=expire_parser): pass
         class Option(WebJSON.Text, key="option", locator="option", parser=option_parser): pass
@@ -122,14 +123,15 @@ class AlpacaOrderUploader(WebStream, Logging, ABC):
 class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
     def __call__(self, spreads, /, **kwargs):
         assert isinstance(spreads, list)
-        if not bool(spreads): return
+        if not bool(spreads): return pd.DataFrame(columns=AlpacaOrders)
         generator = self.generator(spreads, **kwargs)
         spreads = list(generator)
-        if not bool(spreads): return
+        if not bool(spreads): return pd.DataFrame(columns=AlpacaOrders)
         orders = self.uploader(spreads, **kwargs)
         orders = pd.concat(list(orders), axis=0)
         orders = orders.sort_values(by=["group", "identity"], ascending=[True, False], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
+        self.results(orders, title="Uploaded", instrument=Enumerations.Instrument.OPTION)
         return orders
 
     def generator(self, spreads, /, **kwargs):
@@ -145,7 +147,6 @@ class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
             self.console("Updated", f"Spread[{', '.join(securities)}]")
             self.console("Updated", f"Spread[Tight={spread.tightness:.2f}, Money={spread.moneyness:.2f}, Active={spread.activity:.2f}]")
             yield order
-        self.results(spreads, title="Uploaded", instrument=Enumerations.Instrument.SPREAD)
 
 
 
