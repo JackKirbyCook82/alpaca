@@ -9,7 +9,6 @@ Created on Sat May 16 2026
 import multiprocessing
 import pandas as pd
 from parse import parse
-from pprint import pformat
 from abc import ABC, abstractmethod
 
 from finance.variables import Enumerations
@@ -50,7 +49,6 @@ position_parser = lambda string: position_mapping[string, True]
 tenure_parser = lambda string: tenure_mapping[string, True]
 term_parser = lambda string: term_mapping[string, True]
 quantity_parser = lambda string: int(string)
-cost_parser = lambda string: float(string)
 
 
 class AlpacaOrderURL(WebURL, headers={"accept": "application/json", "content-type": "application/json"}):
@@ -67,7 +65,7 @@ class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "q
     class Cost(WebPayload.Value, key="cost", locator="limit_price", parser=cost_formatter): pass
     class Tenure(WebPayload.Value, key="tenure", locator="time_in_force", parser=tenure_formatter): pass
     class Terms(WebPayload.Value, key="term", locator="type", parser=term_formatter): pass
-    class Legs(WebPayload.Mapping, key="securities", locator="legs", multiple=True, optional=False):
+    class Securities(WebPayload.Mapping, key="securities", locator="legs", multiple=True, optional=False):
         class Osi(WebPayload.Value, key="osi", locator="symbol"): pass
         class Intent(WebPayload.Value, key="intent", locator="position_intent", parser=intent_formatter): pass
         class Position(WebPayload.Value, key="position", locator="side", parser=position_formatter): pass
@@ -76,13 +74,12 @@ class AlpacaSpreadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "q
 
 class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
     class Group(WebJSON.Text, key="group", locator="id", parser=str): pass
-    class Time(WebJSON.Text, key="time", locator="created_at", parser=timestamp_parser): pass
+    class Timestamp(WebJSON.Text, key="timestamp", locator="created_at", parser=timestamp_parser): pass
     class Status(WebJSON.Text, key="status", locator="status", parser=Enumerations.Status): pass
     class Tenure(WebJSON.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
     class Term(WebJSON.Text, key="term", locator="type", parser=term_parser): pass
-    class Cost(WebJSON.Text, key="cost", locator="limit_price", parser=float): pass
-    class Security(WebJSON.Mapping, key="security", locator="legs", parser=dict, multiple=True, optional=False):
-        class Individual(WebJSON.Text, key="individual", locator="id", parser=str): pass
+    class Securities(WebJSON.Mapping, key="securities", locator="legs", parser=dict, multiple=True, optional=False):
+        class Identity(WebJSON.Text, key="identity", locator="id", parser=str): pass
         class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
         class Expire(WebJSON.Text, key="expire", locator="expire", parser=expire_parser): pass
         class Option(WebJSON.Text, key="option", locator="option", parser=option_parser): pass
@@ -98,18 +95,20 @@ class AlpacaSpreadPage(AlpacaOrderPage):
         sources = dict(cost=spread.cost, tenure=tenure, term=term, securities=securities)
         url = AlpacaSpreadURL(authenticator=self.authenticator)
         payload = AlpacaSpreadPayload(sources)
-
-#        if not bool(self.safemode): self.load(url, payload=payload)
-#        else: print("\033[31m" + pformat(str(url)) + "\n" + pformat(payload) + "\033[0m")
+        json = self.load(url, payload)
+        data = AlpacaOrderData(json, *args, **kwargs)
+        mapping = data(*args, **kwargs)
+        records = mapping.pop("securities")
+        records = [mapping | record for record in records]
+        order = pd.DataFrame.from_records(records)
+        return order
 
 
 class AlpacaOrderUploader(WebStream, Logging, ABC):
-    def __init__(self, *args, file, **kwargs):
-        if not file.exists(): raise FileNotFoundError(file)
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__mutex = multiprocessing.Lock()
         self.__history = set()
-        self.__file = file
 
     @abstractmethod
     def uploader(self, *args, **kwargs): pass
@@ -118,8 +117,6 @@ class AlpacaOrderUploader(WebStream, Logging, ABC):
     def history(self): return self.__history
     @property
     def mutex(self): return self.__mutex
-    @property
-    def file(self): return self.__file
 
 
 class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
@@ -129,7 +126,11 @@ class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
         generator = self.generator(spreads, **kwargs)
         spreads = list(generator)
         if not bool(spreads): return
-        self.uploader(spreads, **kwargs)
+        orders = self.uploader(spreads, **kwargs)
+        orders = pd.concat(list(orders), axis=0)
+        orders = orders.sort_values(by=["group", "identity"], ascending=[True, False], inplace=False)
+        orders = orders.reset_index(drop=True, inplace=False)
+        return orders
 
     def generator(self, spreads, /, **kwargs):
         for spread in spreads:
@@ -139,10 +140,11 @@ class AlpacaSpreadUploader(AlpacaOrderUploader, page=AlpacaSpreadPage):
 
     def uploader(self, spreads, /, **kwargs):
         for spread in spreads:
-            self.page(spread=spread, **kwargs)
+            order = self.page(spread=spread, **kwargs)
             securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in spread.records]
             self.console("Updated", f"Spread[{', '.join(securities)}]")
             self.console("Updated", f"Spread[Tight={spread.tightness:.2f}, Money={spread.moneyness:.2f}, Active={spread.activity:.2f}]")
+            yield order
         self.results(spreads, title="Uploaded", instrument=Enumerations.Instrument.SPREAD)
 
 
