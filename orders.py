@@ -51,7 +51,7 @@ term_parser = lambda string: term_mapping[string, True]
 quantity_parser = lambda string: int(string)
 
 
-AlpacaOrder = ["identity", "created", "submitted", "filled", "expired", "canceled", "failed", "status", "tenure", "term", "asset", "ticker", "expire", "option", "strike", "position", "quantity"]
+AlpacaOrder = ["orderID", "created", "submitted", "filled", "expired", "canceled", "failed", "status", "tenure", "term", "assetID", "ticker", "expire", "option", "strike", "position", "quantity"]
 class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "orders"]):
     @staticmethod
     def headers(*args, authenticator, **kwargs):
@@ -59,9 +59,9 @@ class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v
 
 
 class AlpacaUploadingOrder(WebURL, headers={"accept": "application/json", "content-type": "application/json"}): pass
-# class AlpacaDownloadingOrder(WebURL, parameters={"status": "all", "nested": True}, headers={"accept": "application/json"}):
-#     @staticmethod
-#     def path(*args, strategy, **kwargs): return [str(strategy)]
+class AlpacaDownloadingOrder(WebURL, parameters={"status": "all", "nested": True}, headers={"accept": "application/json"}):
+    @staticmethod
+    def path(*args, orderID, **kwargs): return [str(orderID)]
 
 
 class AlpacaOrderPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "qty": "1"}, multiple=False, optional=False):
@@ -76,7 +76,7 @@ class AlpacaOrderPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "qt
 
 
 class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
-    class Collective(WebJSON.Text, key="collective", locator="id", parser=str): pass
+    class OrderID(WebJSON.Text, key="orderID", locator="id", parser=str): pass
     class Created(WebJSON.Text, key="created", locator="created_at", parser=timestamp_parser): pass
     class Submitted(WebJSON.Text, key="sumbitted", locator="submitted_at", parser=timestamp_parser): pass
     class Filled(WebJSON.Text, key="filled", locator="filled_at", parser=timestamp_parser): pass
@@ -87,7 +87,7 @@ class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
     class Tenure(WebJSON.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
     class Term(WebJSON.Text, key="term", locator="type", parser=term_parser): pass
     class Securities(WebJSON.Mapping, key="securities", locator="legs", parser=dict, multiple=True, optional=False):
-        class Individual(WebJSON.Text, key="individual", locator="asset_id", parser=str): pass
+        class AssetID(WebJSON.Text, key="assetID", locator="asset_id", parser=str): pass
         class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
         class Expire(WebJSON.Text, key="expire", locator="expire", parser=expire_parser): pass
         class Option(WebJSON.Text, key="option", locator="option", parser=option_parser): pass
@@ -110,25 +110,23 @@ class AlpacaOrderPage(WebJSONPage, ABC):
 
 
 class AlpacaUploadingOrderPage(AlpacaOrderPage):
-    def execute(self, *args, prospect, tenure, term, intent, **kwargs):
+    def execute(self, *args, spread, tenure, term, intent, **kwargs):
         parameters = dict(authenticator=self.authenticator)
         url = AlpacaUploadingOrder(**parameters)
         securities = [{"osi": record.osi, "position": record.position, "intent": (record.postion, intent), "quantity": record.quantity} for record in spread.records]
-        payload = AlpacaOrderData({"cost": prospect.cost, "tenure": tenure, "term": term, "securities": securities})
+        payload = AlpacaOrderData({"cost": spread.cost, "tenure": tenure, "term": term, "securities": securities})
         json = self.load(url, payload=payload)
         data = AlpacaOrderData(json, *args, **kwargs)
         return data
 
 
 class AlpacaDownloadingOrderPage(AlpacaOrderPage):
-    pass
-
-#    def execute(self, *args, strategy, **kwargs):
-#        parameters = dict(authenticator=self.authenticator)
-#        url = AlpacaDownloadingOrder(strategy=strategy, **parameters)
-#        json = self.load(url)
-#        data = AlpacaOrderData(json, *args, **kwargs)
-#        return data
+    def execute(self, *args, orderID, **kwargs):
+        parameters = dict(authenticator=self.authenticator)
+        url = AlpacaDownloadingOrder(orderID=orderID, **parameters)
+        json = self.load(url)
+        data = AlpacaOrderData(json, *args, **kwargs)
+        return data
 
 
 class AlpacaOrderUploader(WebStream, Logging, page=AlpacaUploadingOrderPage):
@@ -137,31 +135,31 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaUploadingOrderPage):
         self.__mutex = multiprocessing.Lock()
         self.__history = set()
 
-    def __call__(self, prospects, /, **kwargs):
-        assert isinstance(prospects, list)
-        if not bool(prospects): return pd.DataFrame(columns=AlpacaOrder)
-        generator = self.generator(prospects, **kwargs)
-        prospects = list(generator)
-        if not bool(prospects): return pd.DataFrame(columns=AlpacaOrder)
-        orders = self.uploader(prospects, **kwargs)
+    def __call__(self, spreads, /, **kwargs):
+        assert isinstance(spreads, list)
+        if not bool(spreads): return pd.DataFrame(columns=AlpacaOrder)
+        generator = self.generator(spreads, **kwargs)
+        spreads = list(generator)
+        if not bool(spreads): return pd.DataFrame(columns=AlpacaOrder)
+        orders = self.uploader(spreads, **kwargs)
         orders = pd.concat(list(orders), axis=0)
-        orders = orders.sort_values(by=["identity", "assert"], ascending=[True, True], inplace=False)
+        orders = orders.sort_values(by=["orderID", "assetID"], ascending=[True, True], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
         self.results(orders, title="Uploaded", instrument=Enumerations.Instrument.OPTION)
         return orders
 
-    def generator(self, prospects, /, **kwargs):
-        for prospect in prospects:
-            if prospect.signature in self.history: continue
-            with self.mutex: self.history.add(prospect.signature)
-            yield prospect
+    def generator(self, spreads, /, **kwargs):
+        for spread in spreads:
+            if spread.signature in self.history: continue
+            with self.mutex: self.history.add(spread.signature)
+            yield spread
 
-    def uploader(self, prospects, /, **kwargs):
-        for prospect in prospects:
-            order = self.page(prospect=prospect, **kwargs)
-            securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in prospect.records]
+    def uploader(self, spreads, /, **kwargs):
+        for spread in spreads:
+            order = self.page(spread=spread, **kwargs)
+            securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in spread.records]
             self.console("Updated", f"Propsect[{', '.join(securities)}]")
-            self.console("Updated", f"Prospect[Tight={prospect.tightness:.2f}, Money={prospect.moneyness:.2f}, Active={prospect.activity:.2f}]")
+            self.console("Updated", f"Prospect[Tight={spread.tightness:.2f}, Money={spread.moneyness:.2f}, Active={spread.activity:.2f}]")
             yield order
 
     @property
@@ -171,20 +169,18 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaUploadingOrderPage):
 
 
 class AlpacaOrderDownloader(WebStream, Logging, page=AlpacaDownloadingOrderPage):
-    pass
+    def __call__(self, orderIDs, **kwargs):
+        assert isinstance(orderIDs, list)
+        if not bool(orderIDs): return pd.DataFrame(columns=AlpacaOrder)
+        orders = self.downloader(orderIDs, **kwargs)
+        orders = pd.concat(list(orders), axis=0)
+        orders = orders.sort_values(by=["orderID", "assetID"], ascending=[True, True], inplace=False)
+        orders = orders.reset_index(drop=True, inplace=False)
+        self.results(orders, title="Downloaded", instrument=Enumerations.Instrument.OPTION)
+        return orders
 
-#    def __call__(self, strategies, **kwargs):
-#        assert isinstance(strategies, list)
-#        if not bool(strategies): return pd.DataFrame(columns=AlpacaOrder)
-#        orders = self.downloader(strategies, **kwargs)
-#        orders = pd.concat(list(orders), axis=0)
-#        orders = orders.sort_values(by=["identity", "asset"], ascending=[True, True], inplace=False)
-#        orders = orders.reset_index(drop=True, inplace=False)
-#        self.results(orders, title="Downloaded", instrument=Enumerations.Instrument.OPTION)
-#        return orders
-
-#    def downloader(self, strategies, /, **kwargs):
-#        for strategy in strategies:
-#            order = self.page(strategy=strategy, **kwargs)
-#            yield order
+    def downloader(self, orderIDs, /, **kwargs):
+        for orderID in set(orderIDs):
+            order = self.page(orderID=orderID, **kwargs)
+            yield order
 

@@ -31,7 +31,7 @@ option_parser = lambda string: OSI.parse(string).option
 strike_parser = lambda string: OSI.parse(string).strike
 
 
-AlpacaPortfolio = ["identity", "ticker", "expire", "option", "strike", "position", "quantity", "entry", "cost"]
+AlpacaPortfolio = ["individual", "ticker", "expire", "option", "strike", "position", "quantity", "entry", "cost"]
 class AlpacaPortfolioURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "positions"], headers={"accept": "application/json"}):
     @staticmethod
     def headers(*args, authenticator, **kwargs):
@@ -39,15 +39,15 @@ class AlpacaPortfolioURL(WebURL, domain="https://paper-api.alpaca.markets", path
 
 
 class AlpacaPortfolioData(WebJSON.Mapping, multiple=True, optional=True):
-    class Individual(WebJSON.Text, key="individual", locator="asset_id", parser=str): pass
+    class Individual(WebJSON.Text, key="assetID", locator="asset_id", parser=str): pass
     class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
     class Expire(WebJSON.Text, key="expire", locator="symbol", parser=expire_parser): pass
     class Option(WebJSON.Text, key="option", locator="symbol", parser=option_parser): pass
     class Strike(WebJSON.Text, key="strike", locator="symbol", parser=strike_parser): pass
     class Position(WebJSON.Text, key="position", locator="side", parser=position_parser): pass
     class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=int): pass
-    class Entry(WebJSON.Text, key="entry", locator="avg_entry_price", parser=float): pass
-    class Cost(WebJSON.Text, key="cost", locator="cost_basis", parser=float): pass
+    class EntryPrice(WebJSON.Text, key="entryprice", locator="avg_entry_price", parser=float): pass
+    class EntryCost(WebJSON.Text, key="entrycost", locator="cost_basis", parser=float): pass
 
 
 class AlpacaPortfolioPage(WebJSONPage):
@@ -61,17 +61,13 @@ class AlpacaPortfolioPage(WebJSONPage):
 
 
 class AlpacaPortfolioDownloader(WebStream, Logging, page=AlpacaPortfolioPage):
-    pass
-
-#    def __call__(self, strategies, **kwargs):
-#        assert isinstance(strategies, dict)
-#        portfolio = self.page(**kwargs)
-#        portfolio["strategy"] = portfolio["asset"].map(strategies)
-#        if bool(portfolio.empty): return pd.DataFrame(columns=AlpacaPortfolio)
-#        portfolio = portfolio.sort_values(by="identity", ascending=True, inplace=False)
-#        portfolio = portfolio.reset_index(drop=True, inplace=False)
-#        self.results(portfolio, title="Downloaded", instrument=Enumerations.Instrument.OPTION)
-#        return portfolio
+    def __call__(self, **kwargs):
+        portfolio = self.page(**kwargs)
+        if bool(portfolio.empty): return pd.DataFrame(columns=AlpacaPortfolio)
+        portfolio = portfolio.sort_values(by=["ticker", "expire", "option", "strike"], ascending=[True, True, True, True], inplace=False, key=key)
+        portfolio = portfolio.reset_index(drop=True, inplace=False)
+        self.results(portfolio, title="Downloaded", instrument=Enumerations.Instrument.OPTION)
+        return portfolio
 
 
 
