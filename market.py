@@ -107,15 +107,8 @@ class AlpacaSecurityPage(AlpacaMarketPage):
         return {field.name: field.parser(mapping[field.code]) for field in self.fields if field.code in mapping.keys()}
 
     @staticmethod
-    def merger(trades, quotes, on):
-        assert isinstance(trades, pd.DataFrame) and isinstance(quotes, pd.DataFrame)
-        if trades.empty or quotes.empty: return pd.DataFrame()
-        header = list(trades.columns) + [column for column in list(quotes.columns) if column not in list(trades.columns)]
-        if "option" in header:
-            on = [value if value != "option" else "key" for value in on]
-            trades["key"], quotes["key"] = trades["option"].astype(str), quotes["option"].astype(str)
-        dataframe = quotes.merge(trades, how="outer", on=list(on), sort=False, suffixes=("", "_"))[header]
-        return dataframe
+    def merge(trades, quotes, on):
+        return trades.merge(quotes, on=on, how="left", validate="many_to_one")
 
     @abstractmethod
     def trades(self, *args, **kwargs): pass
@@ -133,7 +126,7 @@ class AlpacaStockPage(AlpacaSecurityPage):
         parameters = dict(tickers=tickers, authenticator=self.authenticator)
         trades = self.trades(**parameters)
         quotes = self.quotes(**parameters)
-        stocks = self.merger(trades, quotes, on=list(Querys.Symbol))
+        stocks = self.merge(trades, quotes, on=list(Querys.Symbol))
         return stocks
 
     def trades(self, *args, **kwargs):
@@ -175,7 +168,7 @@ class AlpacaOptionPage(AlpacaSecurityPage):
         parameters = dict(osis=osis, authenticator=self.authenticator)
         trades = self.trades(**parameters)
         quotes = self.quotes(**parameters)
-        options = self.merger(trades, quotes, on=list(Querys.Contract))
+        options = self.merge(trades, quotes, on=list(Querys.Contract))
         return options
 
     def trades(self, *args, **kwargs):
@@ -206,7 +199,7 @@ class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
         tickers = list({symbol.ticker for symbol in symbols})
         stocks = self.downloader(tickers, **kwargs)
         stocks = pd.concat(list(stocks), axis=0)
-        stocks = stocks.sort_values(by=["ticker"], ascending=[True], inplace=False)
+        stocks = stocks.sort_values(by=list(Querys), inplace=False)
         stocks = stocks.reset_index(drop=True, inplace=False)
         return stocks
 
@@ -238,10 +231,11 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
 class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
     def __call__(self, contracts, /, **kwargs):
         assert isinstance(contracts, list)
+        contracts = list(set(contracts))
         options = self.downloader(contracts, **kwargs)
         options = pd.concat(list(options), axis=0)
         key = lambda series: series.map(str) if series.name == "option" else series
-        options = options.sort_values(by=["ticker", "expire", "option", "strike"], ascending=[True, True, True, True], inplace=False, key=key)
+        options = options.sort_values(by=list(Querys.Contract), inplace=False, key=key)
         options = options.reset_index(drop=True, inplace=False)
         return options
 

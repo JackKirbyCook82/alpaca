@@ -8,7 +8,7 @@ Created on Sun Jul 5 2026
 
 import pandas as pd
 
-from finance.variables import Enumerations
+from finance.variables import Enumerations, Querys
 from finance.logging import Logging
 from finance.osi import OSI
 from support.custom import ReversibleDict as RDict
@@ -31,7 +31,7 @@ option_parser = lambda string: OSI.parse(string).option
 strike_parser = lambda string: OSI.parse(string).strike
 
 
-AlpacaPortfolio = ["individual", "ticker", "expire", "option", "strike", "position", "quantity", "entry", "cost"]
+AlpacaPortfolio = ["assetID", "ticker", "expire", "option", "strike", "position", "quantity", "entry", "cost"]
 class AlpacaPortfolioURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "positions"], headers={"accept": "application/json"}):
     @staticmethod
     def headers(*args, authenticator, **kwargs):
@@ -64,7 +64,8 @@ class AlpacaPortfolioDownloader(WebStream, Logging, page=AlpacaPortfolioPage):
     def __call__(self, **kwargs):
         portfolio = self.page(**kwargs)
         if bool(portfolio.empty): return pd.DataFrame(columns=AlpacaPortfolio)
-        portfolio = portfolio.sort_values(by=["ticker", "expire", "option", "strike"], ascending=[True, True, True, True], inplace=False, key=key)
+        key = lambda series: series.map(str) if series.name == "option" else series
+        portfolio = portfolio.sort_values(by=list(Querys.Contract), inplace=False, key=key)
         portfolio = portfolio.reset_index(drop=True, inplace=False)
         self.results(portfolio, title="Downloaded", instrument=Enumerations.Instrument.OPTION)
         return portfolio
