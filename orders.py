@@ -11,7 +11,7 @@ import pandas as pd
 from parse import parse
 from abc import ABC, abstractmethod
 
-from finance.variables import Enumerations
+from finance.enumerations import Instrument, Position, Status, Tenure, Terms, Intent
 from finance.logging import Logging
 from finance.osi import OSI
 from support.custom import ReversibleDict as RDict
@@ -27,10 +27,10 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-tenure_mapping = RDict({Enumerations.Tenure.DAY: "day", Enumerations.Tenure.GTC: "gtc", Enumerations.Tenure.FOK: "fok"})
-term_mapping = RDict({Enumerations.Terms.MARKET: "market", Enumerations.Terms.LIMIT: "limit", Enumerations.Terms.STOP: "stop"})
-position_mapping = RDict({Enumerations.Position.LONG: "buy", Enumerations.Position.SHORT: "sell"})
-intent_mapping = RDict({Enumerations.Intent.OPEN: "open", Enumerations.Intent.CLOSE: "close"})
+tenure_mapping = RDict({Tenure.DAY: "day", Tenure.GTC: "gtc", Tenure.FOK: "fok"})
+term_mapping = RDict({Terms.MARKET: "market", Terms.LIMIT: "limit", Terms.STOP: "stop"})
+position_mapping = RDict({Position.LONG: "buy", Position.SHORT: "sell"})
+intent_mapping = RDict({Intent.OPEN: "open", Intent.CLOSE: "close"})
 
 intent_formatter = lambda position, intent: f"{position[position, False]}_to_{intent_mapping[intent, False]}"
 position_formatter = lambda position: position_mapping[position, False]
@@ -83,7 +83,7 @@ class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
     class Expired(WebJSON.Text, key="expired", locator="expired_at", parser=timestamp_parser): pass
     class Canceled(WebJSON.Text, key="canceled", locator="canceled_at", parser=timestamp_parser): pass
     class Failed(WebJSON.Text, key="failed", locator="failed_at", parser=timestamp_parser): pass
-    class Status(WebJSON.Text, key="status", locator="status", parser=Enumerations.Status): pass
+    class Status(WebJSON.Text, key="status", locator="status", parser=Status): pass
     class Tenure(WebJSON.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
     class Term(WebJSON.Text, key="term", locator="type", parser=term_parser): pass
     class Securities(WebJSON.Mapping, key="securities", locator="legs", parser=dict, multiple=True, optional=False):
@@ -143,9 +143,9 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaUploadingOrderPage):
         if not bool(spreads): return pd.DataFrame(columns=AlpacaOrder)
         orders = self.uploader(spreads, **kwargs)
         orders = pd.concat(list(orders), axis=0)
-        orders = orders.sort_values(by=["orderID", "assetID"], ascending=[True, True], inplace=False)
+        orders = orders.sort_values(by=["orderID", "assetID"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
-        self.results(orders, title="Uploaded", instrument=Enumerations.Instrument.OPTION)
+        self.results(orders, title="Uploaded", instrument=Instrument.OPTION)
         return orders
 
     def generator(self, spreads, /, **kwargs):
@@ -174,9 +174,9 @@ class AlpacaOrderDownloader(WebStream, Logging, page=AlpacaDownloadingOrderPage)
         if not bool(orderIDs): return pd.DataFrame(columns=AlpacaOrder)
         orders = self.downloader(orderIDs, **kwargs)
         orders = pd.concat(list(orders), axis=0)
-        orders = orders.sort_values(by=["orderID", "assetID"], ascending=[True, True], inplace=False)
+        orders = orders.sort_values(by=["orderID", "assetID"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
-        self.results(orders, title="Downloaded", instrument=Enumerations.Instrument.OPTION)
+        self.results(orders, title="Downloaded", instrument=Instrument.OPTION)
         return orders
 
     def downloader(self, orderIDs, /, **kwargs):

@@ -8,7 +8,8 @@ Created on Sun Jul 5 2026
 
 import pandas as pd
 
-from finance.variables import Enumerations, Querys
+from finance.enumerations import Instrument, Position
+from finance.querys import Contract
 from finance.logging import Logging
 from finance.osi import OSI
 from support.custom import ReversibleDict as RDict
@@ -23,7 +24,7 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-position_mapping = RDict({Enumerations.Position.LONG: "buy", Enumerations.Position.SHORT: "sell"})
+position_mapping = RDict({Position.LONG: "buy", Position.SHORT: "sell"})
 position_parser = lambda string: position_mapping[string, True]
 ticker_parser = lambda string: OSI.parse(string).ticker
 expire_parser = lambda string: OSI.parse(string).expire
@@ -38,8 +39,8 @@ class AlpacaPortfolioURL(WebURL, domain="https://paper-api.alpaca.markets", path
         return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 
-class AlpacaPortfolioData(WebJSON.Mapping, multiple=True, optional=True):
-    class Individual(WebJSON.Text, key="assetID", locator="asset_id", parser=str): pass
+class AlpacaPortfolioData(WebJSON, multiple=True, optional=True):
+    class AssetID(WebJSON.Text, key="assetID", locator="asset_id", parser=str): pass
     class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
     class Expire(WebJSON.Text, key="expire", locator="symbol", parser=expire_parser): pass
     class Option(WebJSON.Text, key="option", locator="symbol", parser=option_parser): pass
@@ -65,9 +66,9 @@ class AlpacaPortfolioDownloader(WebStream, Logging, page=AlpacaPortfolioPage):
         portfolio = self.page(**kwargs)
         if bool(portfolio.empty): return pd.DataFrame(columns=AlpacaPortfolio)
         key = lambda series: series.map(str) if series.name == "option" else series
-        portfolio = portfolio.sort_values(by=list(Querys.Contract), inplace=False, key=key)
+        portfolio = portfolio.sort_values(by=list(Contract), inplace=False, key=key)
         portfolio = portfolio.reset_index(drop=True, inplace=False)
-        self.results(portfolio, title="Downloaded", instrument=Enumerations.Instrument.OPTION)
+        self.results(portfolio, title="Downloaded", instrument=Instrument.OPTION)
         return portfolio
 
 

@@ -11,7 +11,7 @@ import pandas as pd
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
-from finance.variables import Enumerations
+from finance.enumerations import Instrument
 from finance.logging import Logging
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
@@ -69,7 +69,9 @@ class AlpacaBarsPage(AlpacaHistoryPage):
         super().__init__(*args, **kwargs)
         fields = [AlpacaField("open", "o", np.float32), AlpacaField("close", "c", np.float32), AlpacaField("high", "h", np.float32), AlpacaField("low", "l", np.float32), AlpacaField("adjusted", "vw", np.float32)]
         fields = fields + [AlpacaField("date", "t", history_parser), AlpacaField("volume", "v", np.int64)]
+        parser = lambda mapping: {field.name: field.parser(mapping[field.code]) for field in self.fields if field.code in mapping.keys()}
         self.__fields = fields
+        self.__parser = parser
 
     def __call__(self, *args, tickers, history, **kwargs):
         parameters = dict(tickers=tickers, history=history, authenticator=self.authenticator)
@@ -86,11 +88,10 @@ class AlpacaBarsPage(AlpacaHistoryPage):
         if not bool(pagination): return list(records)
         else: return list(records) + self.bars(*args, pagination=pagination, **kwargs)
 
-    def parser(self, mapping):
-        return {field.name: field.parser(mapping[field.code]) for field in self.fields if field.code in mapping.keys()}
-
     @property
     def fields(self): return self.__fields
+    @property
+    def parser(self): return self.__parser
 
 
 class AlpacaHistoryDownloader(WebStream, Logging, ABC):
@@ -101,7 +102,7 @@ class AlpacaHistoryDownloader(WebStream, Logging, ABC):
 class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
     def __call__(self, symbols, /, **kwargs):
         assert isinstance(symbols, list)
-        tickers = list({symbol.ticker for symbol in symbols})
+        tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
         bars = self.downloader(tickers, **kwargs)
         bars = pd.concat(list(bars), axis=0)
         bars["date"] = pd.to_datetime(bars["date"])
@@ -114,7 +115,7 @@ class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
         for tickers in tickers:
             bars = self.page(tickers=tickers, **kwargs)
             if bool(bars.empty): continue
-            self.results(bars, title="Downloaded", instrument=Enumerations.Instrument.STOCK)
+            self.results(bars, title="Downloaded", instrument=Instrument.STOCK)
             yield bars
 
 
