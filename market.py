@@ -193,7 +193,9 @@ class AlpacaMarketDownloader(WebStream, Logging, ABC):
 
 class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
     def __call__(self, symbols, /, **kwargs):
-        assert isinstance(symbols, list)
+        if symbols in Symbol: symbols = [symbols]
+        elif isinstance(symbols, list): pass
+        else: raise TypeError(type(symbols))
         tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
         stocks = self.downloader(tickers, **kwargs)
         stocks = pd.concat(list(stocks), axis=0)
@@ -212,7 +214,9 @@ class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
 
 class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
     def __call__(self, symbols, /, **kwargs):
-        assert isinstance(symbols, list)
+        if symbols in Symbol: symbols = [symbols]
+        elif isinstance(symbols, list): pass
+        else: raise TypeError(type(symbols))
         tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
         contracts = self.downloader(tickers, **kwargs)
         contracts = list(contracts)
@@ -228,7 +232,9 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
 
 class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
     def __call__(self, contracts, /, **kwargs):
-        assert isinstance(contracts, list)
+        if contracts in Contract: contracts = [contracts]
+        elif isinstance(contracts, list): pass
+        else: raise TypeError(type(contracts))
         contracts = list(dict.fromkeys(contracts))
         options = self.downloader(contracts, **kwargs)
         options = pd.concat(list(options), axis=0)

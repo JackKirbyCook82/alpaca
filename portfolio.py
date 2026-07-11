@@ -47,8 +47,8 @@ class AlpacaPortfolioData(WebJSON, multiple=True, optional=True):
     class Strike(WebJSON.Text, key="strike", locator="symbol", parser=strike_parser): pass
     class Position(WebJSON.Text, key="position", locator="side", parser=position_parser): pass
     class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=int): pass
-    class EntryPrice(WebJSON.Text, key="entryprice", locator="avg_entry_price", parser=float): pass
-    class EntryCost(WebJSON.Text, key="entrycost", locator="cost_basis", parser=float): pass
+    class Price(WebJSON.Text, key="price", locator="avg_entry_price", parser=float): pass
+    class Cost(WebJSON.Text, key="cost", locator="cost_basis", parser=float): pass
 
 
 class AlpacaPortfolioPage(WebJSONPage):

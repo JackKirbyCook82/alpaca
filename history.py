@@ -13,6 +13,7 @@ from abc import ABC, abstractmethod
 
 from finance.enumerations import Instrument
 from finance.logging import Logging
+from finance.querys import Symbol
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
@@ -101,7 +102,9 @@ class AlpacaHistoryDownloader(WebStream, Logging, ABC):
 
 class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
     def __call__(self, symbols, /, **kwargs):
-        assert isinstance(symbols, list)
+        if symbols in Symbol: symbols = [symbols]
+        elif isinstance(symbols, list): pass
+        else: raise TypeError(type(symbols))
         tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
         bars = self.downloader(tickers, **kwargs)
         bars = pd.concat(list(bars), axis=0)
