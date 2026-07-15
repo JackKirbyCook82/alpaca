@@ -32,7 +32,7 @@ option_parser = lambda string: OSI.parse(string).option
 strike_parser = lambda string: OSI.parse(string).strike
 
 
-AlpacaPortfolio = ["assetID", "ticker", "expire", "option", "strike", "position", "quantity", "entry", "cost"]
+AlpacaPortfolio = ["assetID", "ticker", "expire", "option", "strike", "position", "quantity", "entry", "spent"]
 class AlpacaPortfolioURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "positions"], headers={"accept": "application/json"}):
     @staticmethod
     def headers(*args, authenticator, **kwargs):
@@ -47,8 +47,8 @@ class AlpacaPortfolioData(WebJSON, multiple=True, optional=True):
     class Strike(WebJSON.Text, key="strike", locator="symbol", parser=strike_parser): pass
     class Position(WebJSON.Text, key="position", locator="side", parser=position_parser): pass
     class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=int): pass
-    class Price(WebJSON.Text, key="price", locator="avg_entry_price", parser=float): pass
-    class Cost(WebJSON.Text, key="cost", locator="cost_basis", parser=float): pass
+    class Entry(WebJSON.Text, key="entry", locator="avg_entry_price", parser=float): pass
+    class Spent(WebJSON.Text, key="spent", locator="cost_basis", parser=float): pass
 
 
 class AlpacaPortfolioPage(WebJSONPage):
