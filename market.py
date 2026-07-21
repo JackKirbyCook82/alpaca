@@ -129,6 +129,8 @@ class AlpacaStockPage(AlpacaSecurityPage):
         trades = self.trades(**parameters)
         quotes = self.quotes(**parameters)
         stocks = self.merger(quotes, trades, on="ticker")
+        stocks["expire"] = pd.to_datetime(stocks["expire"])
+        stocks["strike"] = pd.to_numeric(stocks["strike"])
         return stocks
 
     def trades(self, *args, **kwargs):
@@ -169,6 +171,8 @@ class AlpacaOptionPage(AlpacaSecurityPage):
         trades = self.trades(**parameters)
         quotes = self.quotes(**parameters)
         options = self.merger(quotes, trades, on="osi")
+        options["expire"] = pd.to_datetime(options["expire"])
+        options["strike"] = pd.to_numeric(options["strike"])
         return options
 
     def trades(self, *args, **kwargs):

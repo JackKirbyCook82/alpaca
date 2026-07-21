@@ -58,6 +58,8 @@ class AlpacaPortfolioPage(WebJSONPage):
         datas = AlpacaPortfolioData(json, *args, **kwargs)
         records = [data(*args, **kwargs) for data in datas]
         dataframe = pd.DataFrame.from_records(records)
+        dataframe["expire"] = pd.to_datetime(dataframe["expire"])
+        dataframe["strike"] = pd.to_numeric(dataframe["strike"])
         return dataframe
 
 

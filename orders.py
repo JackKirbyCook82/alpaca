@@ -103,6 +103,8 @@ class AlpacaOrderPage(WebJSONPage, ABC):
         records = mapping.pop("securities")
         records = [mapping | record for record in records]
         order = pd.DataFrame.from_records(records)
+        order["expire"] = pd.to_datetime(order["expire"])
+        order["strike"] = pd.to_numeric(order["strike"])
         return order
 
     @abstractmethod
