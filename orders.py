@@ -51,7 +51,7 @@ term_parser = lambda string: term_mapping[string, True]
 quantity_parser = lambda string: int(string)
 
 
-AlpacaOrder = ["orderID", "created", "submitted", "filled", "expired", "canceled", "failed", "status", "tenure", "term", "assetID", "ticker", "expire", "option", "strike", "position", "quantity"]
+AlpacaOrder = ["order", "created", "submitted", "filled", "expired", "canceled", "failed", "status", "tenure", "term", "asset", "ticker", "expire", "option", "strike", "position", "quantity"]
 class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "orders"]):
     @staticmethod
     def headers(*args, authenticator, **kwargs):
@@ -76,9 +76,9 @@ class AlpacaOrderPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "qt
 
 
 class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
-    class OrderID(WebJSON.Text, key="orderID", locator="id", parser=str): pass
+    class OrderID(WebJSON.Text, key="order", locator="id", parser=str): pass
     class Created(WebJSON.Text, key="created", locator="created_at", parser=timestamp_parser): pass
-    class Submitted(WebJSON.Text, key="sumbitted", locator="submitted_at", parser=timestamp_parser): pass
+    class Submitted(WebJSON.Text, key="submitted", locator="submitted_at", parser=timestamp_parser): pass
     class Filled(WebJSON.Text, key="filled", locator="filled_at", parser=timestamp_parser): pass
     class Expired(WebJSON.Text, key="expired", locator="expired_at", parser=timestamp_parser): pass
     class Canceled(WebJSON.Text, key="canceled", locator="canceled_at", parser=timestamp_parser): pass
@@ -87,7 +87,7 @@ class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
     class Tenure(WebJSON.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
     class Term(WebJSON.Text, key="term", locator="type", parser=term_parser): pass
     class Securities(WebJSON.Mapping, key="securities", locator="legs", parser=dict, multiple=True, optional=False):
-        class AssetID(WebJSON.Text, key="assetID", locator="asset_id", parser=str): pass
+        class AssetID(WebJSON.Text, key="asset", locator="asset_id", parser=str): pass
         class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
         class Expire(WebJSON.Text, key="expire", locator="expire", parser=expire_parser): pass
         class Option(WebJSON.Text, key="option", locator="option", parser=option_parser): pass
@@ -145,7 +145,7 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaUploadingOrderPage):
         if not bool(spreads): return pd.DataFrame(columns=AlpacaOrder)
         orders = self.uploader(spreads, **kwargs)
         orders = pd.concat(list(orders), axis=0)
-        orders = orders.sort_values(by=["orderID", "assetID"], inplace=False)
+        orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
         self.results(orders, title="Uploaded", instrument=Instrument.OPTION)
         return orders
@@ -176,7 +176,7 @@ class AlpacaOrderDownloader(WebStream, Logging, page=AlpacaDownloadingOrderPage)
         if not bool(orderIDs): return pd.DataFrame(columns=AlpacaOrder)
         orders = self.downloader(orderIDs, **kwargs)
         orders = pd.concat(list(orders), axis=0)
-        orders = orders.sort_values(by=["orderID", "assetID"], inplace=False)
+        orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
         self.results(orders, title="Downloaded", instrument=Instrument.OPTION)
         return orders
