@@ -102,9 +102,9 @@ class AlpacaHistoryDownloader(WebStream, Logging, ABC):
 
 class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
     def __call__(self, symbols, /, **kwargs):
-        if symbols in Symbol: symbols = [symbols]
-        elif isinstance(symbols, list): pass
-        else: raise TypeError(type(symbols))
+        assert isinstance(symbols, (list, Symbol))
+        assert all([isinstance(symbol, Symbol) for symbol in symbols]) if isinstance(symbols, list) else True
+        if not isinstance(symbols, list): symbols = [symbols]
         tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
         bars = self.downloader(tickers, **kwargs)
         bars = pd.concat(list(bars), axis=0)

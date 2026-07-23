@@ -61,7 +61,7 @@ class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v
 class AlpacaUploadingOrder(WebURL, headers={"accept": "application/json", "content-type": "application/json"}): pass
 class AlpacaDownloadingOrder(WebURL, parameters={"status": "all", "nested": True}, headers={"accept": "application/json"}):
     @staticmethod
-    def path(*args, orderID, **kwargs): return [str(orderID)]
+    def path(*args, order, **kwargs): return [str(order)]
 
 
 class AlpacaOrderPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "qty": "1"}, multiple=False, optional=False):
@@ -76,7 +76,7 @@ class AlpacaOrderPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "qt
 
 
 class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
-    class OrderID(WebJSON.Text, key="order", locator="id", parser=str): pass
+    class Order(WebJSON.Text, key="order", locator="id", parser=str): pass
     class Created(WebJSON.Text, key="created", locator="created_at", parser=timestamp_parser): pass
     class Submitted(WebJSON.Text, key="submitted", locator="submitted_at", parser=timestamp_parser): pass
     class Filled(WebJSON.Text, key="filled", locator="filled_at", parser=timestamp_parser): pass
@@ -87,7 +87,7 @@ class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
     class Tenure(WebJSON.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
     class Term(WebJSON.Text, key="term", locator="type", parser=term_parser): pass
     class Securities(WebJSON.Mapping, key="securities", locator="legs", parser=dict, multiple=True, optional=False):
-        class AssetID(WebJSON.Text, key="asset", locator="asset_id", parser=str): pass
+        class Asset(WebJSON.Text, key="asset", locator="asset_id", parser=str): pass
         class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
         class Expire(WebJSON.Text, key="expire", locator="expire", parser=expire_parser): pass
         class Option(WebJSON.Text, key="option", locator="option", parser=option_parser): pass
@@ -123,9 +123,9 @@ class AlpacaUploadingOrderPage(AlpacaOrderPage):
 
 
 class AlpacaDownloadingOrderPage(AlpacaOrderPage):
-    def execute(self, *args, orderID, **kwargs):
+    def execute(self, *args, order, **kwargs):
         parameters = dict(authenticator=self.authenticator)
-        url = AlpacaDownloadingOrder(orderID=orderID, **parameters)
+        url = AlpacaDownloadingOrder(order=order, **parameters)
         json = self.load(url)
         data = AlpacaOrderData(json, *args, **kwargs)
         return data
@@ -171,18 +171,20 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaUploadingOrderPage):
 
 
 class AlpacaOrderDownloader(WebStream, Logging, page=AlpacaDownloadingOrderPage):
-    def __call__(self, orderIDs, **kwargs):
-        assert isinstance(orderIDs, list)
-        if not bool(orderIDs): return pd.DataFrame(columns=AlpacaOrder)
-        orders = self.downloader(orderIDs, **kwargs)
-        orders = pd.concat(list(orders), axis=0)
-        orders = orders.sort_values(by=["order", "asset"], inplace=False)
-        orders = orders.reset_index(drop=True, inplace=False)
-        self.results(orders, title="Downloaded", instrument=Instrument.OPTION)
-        return orders
+    def __call__(self, orders, **kwargs):
+        assert isinstance(orders, (list, str))
+        assert all([isinstance(order, str) for order in orders]) if isinstance(orders, list) else True
+        if isinstance(orders, str): orders = [orders]
+        if not bool(orders): return pd.DataFrame(columns=AlpacaOrder)
+        holdings = self.downloader(orders, **kwargs)
+        holdings = pd.concat(list(holdings), axis=0)
+        holdings = holdings.sort_values(by=["order", "asset"], inplace=False)
+        holdings = holdings.reset_index(drop=True, inplace=False)
+        self.results(holdings, title="Downloaded", instrument=Instrument.OPTION)
+        return holdings
 
-    def downloader(self, orderIDs, /, **kwargs):
-        for orderID in set(orderIDs):
-            order = self.page(orderID=orderID, **kwargs)
-            yield order
+    def downloader(self, orders, /, **kwargs):
+        for order in set(orders):
+            holdings = self.page(order=order, **kwargs)
+            yield holdings
 

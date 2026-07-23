@@ -197,9 +197,9 @@ class AlpacaMarketDownloader(WebStream, Logging, ABC):
 
 class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
     def __call__(self, symbols, /, **kwargs):
-        if symbols in Symbol: symbols = [symbols]
-        elif isinstance(symbols, list): pass
-        else: raise TypeError(type(symbols))
+        assert isinstance(symbols, (list, Symbol))
+        assert all([isinstance(symbol, Symbol) for symbol in symbols]) if isinstance(symbols, list) else True
+        if not isinstance(symbols, list): symbols = [symbols]
         tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
         stocks = self.downloader(tickers, **kwargs)
         stocks = pd.concat(list(stocks), axis=0)
@@ -218,9 +218,9 @@ class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
 
 class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
     def __call__(self, symbols, /, **kwargs):
-        if symbols in Symbol: symbols = [symbols]
-        elif isinstance(symbols, list): pass
-        else: raise TypeError(type(symbols))
+        assert isinstance(symbols, (list, Symbol))
+        assert all([isinstance(symbol, Symbol) for symbol in symbols]) if isinstance(symbols, list) else True
+        if not isinstance(symbols, list): symbols = [symbols]
         tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
         contracts = self.downloader(tickers, **kwargs)
         contracts = list(contracts)
@@ -236,9 +236,9 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
 
 class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
     def __call__(self, contracts, /, **kwargs):
-        if contracts in Contract: contracts = [contracts]
-        elif isinstance(contracts, list): pass
-        else: raise TypeError(type(contracts))
+        assert isinstance(contracts, (list, Contract))
+        assert all([isinstance(contract, Contract) for contract in contracts]) if isinstance(contracts, list) else True
+        if not isinstance(contracts, list): contracts = [contracts]
         contracts = list(dict.fromkeys(contracts))
         options = self.downloader(contracts, **kwargs)
         options = pd.concat(list(options), axis=0)
