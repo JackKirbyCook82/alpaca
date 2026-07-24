@@ -188,3 +188,5 @@ class AlpacaOrderDownloader(WebStream, Logging, page=AlpacaDownloadingOrderPage)
             holdings = self.page(order=order, **kwargs)
             yield holdings
 
+
+

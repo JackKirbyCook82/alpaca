@@ -128,9 +128,8 @@ class AlpacaStockPage(AlpacaSecurityPage):
         parameters = dict(tickers=tickers, authenticator=self.authenticator)
         trades = self.trades(**parameters)
         quotes = self.quotes(**parameters)
+        if quotes.empty: return None
         stocks = self.merger(quotes, trades, on="ticker")
-        stocks["expire"] = pd.to_datetime(stocks["expire"])
-        stocks["strike"] = pd.to_numeric(stocks["strike"])
         return stocks
 
     def trades(self, *args, **kwargs):
@@ -170,9 +169,8 @@ class AlpacaOptionPage(AlpacaSecurityPage):
         parameters = dict(osis=osis, authenticator=self.authenticator)
         trades = self.trades(**parameters)
         quotes = self.quotes(**parameters)
+        if quotes.empty: return None
         options = self.merger(quotes, trades, on="osi")
-        options["expire"] = pd.to_datetime(options["expire"])
-        options["strike"] = pd.to_numeric(options["strike"])
         return options
 
     def trades(self, *args, **kwargs):
@@ -197,8 +195,6 @@ class AlpacaMarketDownloader(WebStream, Logging, ABC):
 
 class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
     def __call__(self, symbols, /, **kwargs):
-        assert isinstance(symbols, (list, Symbol))
-        assert all([isinstance(symbol, Symbol) for symbol in symbols]) if isinstance(symbols, list) else True
         if not isinstance(symbols, list): symbols = [symbols]
         tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
         stocks = self.downloader(tickers, **kwargs)
@@ -211,6 +207,7 @@ class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
         tickers = [tickers[index:index+self.capacity] for index in range(0, len(tickers), self.capacity)]
         for tickers in tickers:
             stocks = self.page(tickers=tickers, **kwargs)
+            if stocks is None: continue
             if bool(stocks.empty): continue
             self.results(stocks, title="Downloaded", instrument=Instrument.STOCK)
             yield stocks
@@ -218,8 +215,6 @@ class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
 
 class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
     def __call__(self, symbols, /, **kwargs):
-        assert isinstance(symbols, (list, Symbol))
-        assert all([isinstance(symbol, Symbol) for symbol in symbols]) if isinstance(symbols, list) else True
         if not isinstance(symbols, list): symbols = [symbols]
         tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
         contracts = self.downloader(tickers, **kwargs)
@@ -236,8 +231,6 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
 
 class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
     def __call__(self, contracts, /, **kwargs):
-        assert isinstance(contracts, (list, Contract))
-        assert all([isinstance(contract, Contract) for contract in contracts]) if isinstance(contracts, list) else True
         if not isinstance(contracts, list): contracts = [contracts]
         contracts = list(dict.fromkeys(contracts))
         options = self.downloader(contracts, **kwargs)
@@ -251,8 +244,9 @@ class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
         contracts = [contracts[index:index+self.capacity] for index in range(0, len(contracts), self.capacity)]
         for contracts in contracts:
             options = self.page(contracts=contracts, **kwargs)
+            if options is None: continue
             if bool(options.empty): continue
-            contracts = options["osi"].apply(lambda osi: asdict(osi), axis=1, result_type="expand")
+            contracts = pd.DataFrame.from_records(options["osi"].map(OSI).map(asdict), index=options.index)
             options = pd.concat([options, contracts], axis=1).drop(columns=["osi"], inplace=False)
             self.results(options, title="Downloaded", instrument=Instrument.OPTION)
             yield options
