@@ -160,8 +160,8 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaUploadingOrderPage):
         for spread in spreads:
             order = self.page(spread=spread, **kwargs)
             securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in spread.records]
-            self.console("Updated", f"Propsect[{', '.join(securities)}]")
-            self.console("Updated", f"Prospect[Tight={spread.tightness:.2f}, Money={spread.moneyness:.2f}, Active={spread.activity:.2f}]")
+            self.console("Uploaded", f"Propsect[{', '.join(securities)}]")
+            self.console("Uploaded", f"Prospect[Tight={spread.tightness:.2f}, Money={spread.moneyness:.2f}, Active={spread.activity:.2f}]")
             yield order
 
     @property

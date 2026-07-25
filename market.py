@@ -129,8 +129,8 @@ class AlpacaStockPage(AlpacaSecurityPage):
         trades = self.trades(**parameters)
         quotes = self.quotes(**parameters)
         if quotes.empty: return None
-        stocks = self.merger(quotes, trades, on="ticker")
-        return stocks
+        elif trades.empty: return quotes.assign(last=np.NaN)
+        else: return self.merger(quotes, trades, on="ticker")
 
     def trades(self, *args, **kwargs):
         url = AlpacaStockTradeURL(*args, **kwargs)
@@ -170,8 +170,8 @@ class AlpacaOptionPage(AlpacaSecurityPage):
         trades = self.trades(**parameters)
         quotes = self.quotes(**parameters)
         if quotes.empty: return None
-        options = self.merger(quotes, trades, on="osi")
-        return options
+        elif trades.empty: return quotes.assign(last=np.NaN)
+        else: return self.merger(quotes, trades, on="osi")
 
     def trades(self, *args, **kwargs):
         url = AlpacaOptionTradeURL(*args, **kwargs)
