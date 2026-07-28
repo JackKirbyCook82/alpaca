@@ -30,11 +30,9 @@ ticker_parser = lambda string: OSI.parse(string).ticker
 expire_parser = lambda string: OSI.parse(string).expire
 option_parser = lambda string: OSI.parse(string).option
 strike_parser = lambda string: OSI.parse(string).strike
-proceeds_parser = lambda number: - min(0, number)
-payments_parser = lambda number: + max(0, number)
 
 
-AlpacaPortfolio = ["asset", "ticker", "expire", "option", "strike", "position", "quantity", "proceeds", "payments"]
+AlpacaPortfolio = ["asset", "ticker", "expire", "option", "strike", "position", "quantity", "entry"]
 class AlpacaPortfolioURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "positions"], headers={"accept": "application/json"}):
     @staticmethod
     def headers(*args, authenticator, **kwargs):
@@ -49,8 +47,7 @@ class AlpacaPortfolioData(WebJSON, multiple=True, optional=True):
     class Strike(WebJSON.Text, key="strike", locator="symbol", parser=strike_parser): pass
     class Position(WebJSON.Text, key="position", locator="side", parser=position_parser): pass
     class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=int): pass
-    class Proceeds(WebJSON.Text, key="proceeds", locator="cost_basis", parser=proceeds_parser): pass
-    class Payments(WebJSON.Text, key="payments", locator="cost_basis", parser=payments_parser): pass
+    class Entry(WebJSON.Text, key="entry", locator="avg_entry_price", parser=int): pass
 
 
 class AlpacaPortfolioPage(WebJSONPage):
