@@ -48,7 +48,7 @@ intent_parser = lambda string: intent_mapping[parse("{position}_to_{intent}", st
 position_parser = lambda string: position_mapping[string, True]
 tenure_parser = lambda string: tenure_mapping[string, True]
 term_parser = lambda string: term_mapping[string, True]
-quantity_parser = lambda string: int(string)
+quantity_parser = lambda string: abs(int(string))
 
 
 AlpacaOrder = ["order", "created", "submitted", "filled", "expired", "canceled", "failed", "status", "tenure", "term", "asset", "ticker", "expire", "option", "strike", "position", "quantity"]
@@ -93,7 +93,7 @@ class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
         class Option(WebJSON.Text, key="option", locator="option", parser=option_parser): pass
         class Strike(WebJSON.Text, key="strike", locator="strike", parser=strike_parser): pass
         class Position(WebJSON.Text, key="position", locator="side", parser=position_parser): pass
-        class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=int): pass
+        class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=quantity_parser): pass
 
 
 class AlpacaOrderPage(WebJSONPage, ABC):
