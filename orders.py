@@ -10,8 +10,9 @@ import multiprocessing
 import pandas as pd
 from parse import parse
 from datetime import date as Date
+from datetime import datetime as DateTime
 
-from finance.enumerations import Instrument, Position, Status, Tenure, Terms, Intent
+from finance.enumerations import Instrument, Option, Position, Status, Tenure, Terms, Intent, Spread
 from finance.logging import Logging
 from finance.osi import OSI
 from support.custom import ReversibleDict as RDict
@@ -19,10 +20,11 @@ from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webpayloads import WebPayload
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
+from support.files import File, Header
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["AlpacaOrderUploader", "AlpacaHeaders"]
+__all__ = ["AlpacaOrderUploader", "AlpacaOrderDownloader", "AlpacaOrderUploadingFile", "AlpacaOrderDownloadingFile"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -50,10 +52,17 @@ tenure_parser = lambda string: tenure_mapping[string, True]
 term_parser = lambda string: term_mapping[string, True]
 quantity_parser = lambda string: abs(int(string))
 
+order_typing = {"order": str, "asset": str, "spread": int, "ticker": str, "expire": Date, "option": int, "strike": float, "position": int, "quantity": int}
+order_formatting = {"spread": int, "expire": lambda expire: expire.strftime("%Y%m%d"), "option": int, "position": int}
+order_parsing = {"spread": Spread, "expire": lambda string: DateTime.strptime(string, "%Y%m%d").date(), "option": Option, "position": Position}
+uploading_columns = ["order", "asset", "spread", "ticker", "expire", "option", "strike", "position", "quantity"]
+downloading_columns = []
+uploading_header = Header(uploading_columns, order_typing, order_formatting, order_parsing)
+downloading_header = Header(downloading_columns, order_typing, order_formatting, order_parsing)
 
-class AlpacaHeaders:
-    Uploading = {"order": str, "asset": str, "spread": int, "ticker": str, "expire": Date, "option": int, "strike": float, "position": int, "quantity": int}
-    Downloading = {}
+
+class AlpacaOrderUploadingFile(File, header=uploading_header): pass
+class AlpacaOrderDownloadingFile(File, header=downloading_header): pass
 
 
 class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "orders"]):
@@ -115,37 +124,32 @@ class AlpacaUploadingOrderPage(WebJSONPage):
         order["expire"] = pd.to_datetime(order["expire"])
         order["strike"] = pd.to_numeric(order["strike"])
         order["spread"] = acquisition.spread
-        columns = list(AlpacaHeaders.Uploading.keys())
-        return order[columns]
+        return order[uploading_columns]
 
 
-# class AlpacaDownloadingOrderPage(AlpacaOrderPage):
-#     def execute(self, *args, order, **kwargs):
-#         parameters = dict(authenticator=self.authenticator)
-#         url = AlpacaDownloadingOrder(order=order, **parameters)
-#         json = self.load(url)
-#         data = AlpacaOrderData(json, *args, **kwargs)
-#         return data
+class AlpacaDownloadingOrderPage(WebJSONPage):
+    pass
 
 
 class AlpacaOrderUploader(WebStream, Logging, page=AlpacaUploadingOrderPage):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, file, **kwargs):
         super().__init__(*args, **kwargs)
         self.__mutex = multiprocessing.Lock()
         self.__history = set()
+        self.__file = file
 
     def __call__(self, acquisitions, /, **kwargs):
         assert isinstance(acquisitions, list)
-        columns = list(AlpacaHeaders.Uploading.keys())
-        if not bool(acquisitions): return pd.DataFrame(columns=columns)
+        if not bool(acquisitions): return pd.DataFrame(columns=uploading_columns)
         acquisitions = self.filter(acquisitions, **kwargs)
         acquisitions = list(acquisitions)
-        if not bool(acquisitions): return pd.DataFrame(columns=columns)
+        if not bool(acquisitions): return pd.DataFrame(columns=uploading_columns)
         orders = self.uploader(acquisitions, **kwargs)
         orders = pd.concat(list(orders), axis=0)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
         self.results(orders, title="Uploaded", instrument=Instrument.OPTION)
+        self.file.save(orders, mode="a")
         return orders
 
     def filter(self, acquisitions, /, **kwargs):
@@ -166,6 +170,21 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaUploadingOrderPage):
     def history(self): return self.__history
     @property
     def mutex(self): return self.__mutex
+    @property
+    def file(self): return self.__file
+
+
+class AlpacaOrderDownloader(WebStream, Logging, page=AlpacaDownloadingOrderPage):
+    pass
+
+
+# class AlpacaDownloadingOrderPage(AlpacaOrderPage):
+#     def execute(self, *args, order, **kwargs):
+#         parameters = dict(authenticator=self.authenticator)
+#         url = AlpacaDownloadingOrder(order=order, **parameters)
+#         json = self.load(url)
+#         data = AlpacaOrderData(json, *args, **kwargs)
+#         return data
 
 
 # class AlpacaOrderDownloader(WebStream, Logging, page=AlpacaDownloadingOrderPage):

@@ -13,7 +13,6 @@ from abc import ABC, abstractmethod
 
 from finance.enumerations import Instrument
 from finance.logging import Logging
-from finance.querys import Symbol
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
