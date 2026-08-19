@@ -7,19 +7,22 @@ Created on Sun Jul 5 2026
 """
 
 import pandas as pd
+from datetime import date as Date
+from datetime import datetime as DateTime
 
-from finance.enumerations import Instrument, Position
+from finance.enumerations import Instrument, Option, Position
 from finance.querys import Contract
 from finance.logging import Logging
 from finance.osi import OSI
-from support.custom import ReversibleDict as RDict
 from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
+from support.custom import ReversibleDict as RDict
+from support.files import File, Header
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["AlpacaPortfolioDownloader", "AlpacaPortfolio"]
+__all__ = ["AlpacaPortfolioDownloader", "AlpacaPortfolioFile"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -31,8 +34,18 @@ expire_parser = lambda string: OSI.parse(string).expire
 option_parser = lambda string: OSI.parse(string).option
 strike_parser = lambda string: OSI.parse(string).strike
 
+portfolio_typing = {"asset": str, "ticker": str, "expire": Date, "option": int, "strike": float, "position": int, "quantity": int, "entry": float}
+portfolio_formatting = {"expire": lambda expire: expire.strftime("%Y%m%d"), "option": int, "position": int}
+portfolio_parsing = {"expire": lambda string: DateTime.strptime(string, "%Y%m%d").date(), "option": Option, "position": Position}
+portfolio_columns = ["asset", "ticker", "expire", "option", "strike", "position", "quantity", "entry"]
+portfolio_header = Header(portfolio_columns, portfolio_typing, portfolio_formatting, portfolio_parsing)
 
-AlpacaPortfolio = ["asset", "ticker", "expire", "option", "strike", "position", "quantity", "entry"]
+
+class AlpacaPortfolioFile(File, header=portfolio_header):
+    def results(self, orders, *args, title, **kwargs):
+        pass
+
+
 class AlpacaPortfolioURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "positions"], headers={"accept": "application/json"}):
     @staticmethod
     def headers(*args, authenticator, **kwargs):
@@ -65,7 +78,7 @@ class AlpacaPortfolioPage(WebJSONPage):
 class AlpacaPortfolioDownloader(WebStream, Logging, page=AlpacaPortfolioPage):
     def __call__(self, **kwargs):
         portfolio = self.page(**kwargs)
-        if bool(portfolio.empty): return pd.DataFrame(columns=AlpacaPortfolio)
+        if bool(portfolio.empty): return pd.DataFrame(columns=portfolio_columns)
         key = lambda series: series.map(str) if series.name == "option" else series
         portfolio = portfolio.sort_values(by=list(Contract), inplace=False, key=key)
         portfolio = portfolio.reset_index(drop=True, inplace=False)
