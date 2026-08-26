@@ -79,10 +79,11 @@ class AlpacaPortfolioDownloader(WebStream, Logging, page=AlpacaPortfolioPage):
     def __call__(self, **kwargs):
         portfolio = self.page(**kwargs)
         if bool(portfolio.empty): return pd.DataFrame(columns=portfolio_columns)
+        scope = self.scope(portfolio, instrument=Instrument.OPTION)
+        self.results(scope=scope, size=len(portfolio.index), title="Downloaded")
         key = lambda series: series.map(str) if series.name == "option" else series
         portfolio = portfolio.sort_values(by=list(Contract), inplace=False, key=key)
         portfolio = portfolio.reset_index(drop=True, inplace=False)
-        self.results(portfolio, title="Downloaded", instrument=Instrument.OPTION)
         return portfolio
 
 

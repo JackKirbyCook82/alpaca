@@ -116,7 +116,7 @@ class AlpacaOrderPage(WebJSONPage):
         if bool(dryrun):
             print("\033[34m" + pformat(url) + "\033[0m")
             print("\033[34m" + pformat(payload) + "\033[0m")
-            return pd.DataFrame(columns=order_columns)
+            return None
         json = self.load(url, payload=payload)
         data = AlpacaOrderData(json, *args, **kwargs)
         mapping = data(*args, **kwargs)
@@ -142,10 +142,12 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderPage):
         acquisitions = list(acquisitions)
         if not bool(acquisitions): return pd.DataFrame(columns=order_columns)
         orders = self.uploader(acquisitions, **kwargs)
+        if orders is None: return pd.DataFrame(columns=order_columns)
         orders = pd.concat(list(orders), axis=0)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
-        self.results(orders, title="Uploaded", instrument=Instrument.OPTION)
+        scope = self.scope(orders, instruments=Instrument.OPTION)
+        self.results(scope=scope, size=len(orders.index), title="Uploaded")
         return orders
 
     def filter(self, acquisitions, /, **kwargs):

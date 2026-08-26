@@ -196,36 +196,37 @@ class AlpacaMarketDownloader(WebStream, Logging, ABC):
 class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
     def __call__(self, symbols, /, **kwargs):
         if not isinstance(symbols, list): symbols = [symbols]
-        tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
-        stocks = self.downloader(tickers, **kwargs)
+        stocks = self.downloader(symbols, **kwargs)
         stocks = pd.concat(list(stocks), axis=0)
         stocks = stocks.sort_values(by=list(Symbol), inplace=False)
         stocks = stocks.reset_index(drop=True, inplace=False)
         return stocks
 
-    def downloader(self, tickers, /, **kwargs):
-        tickers = [tickers[index:index+self.capacity] for index in range(0, len(tickers), self.capacity)]
-        for tickers in tickers:
+    def downloader(self, symbols, /, **kwargs):
+        symbols = [symbols[index:index+self.capacity] for index in range(0, len(symbols), self.capacity)]
+        for symbols in symbols:
+            scope = self.scope(symbols, instrument=Instrument.STOCK)
+            tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
             stocks = self.page(tickers=tickers, **kwargs)
+            self.results(scope=scope, size=len(stocks), title="Downloaded")
             if stocks is None: continue
             if bool(stocks.empty): continue
-            self.results(stocks, title="Downloaded", instrument=Instrument.STOCK)
             yield stocks
 
 
 class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
     def __call__(self, symbols, /, **kwargs):
         if not isinstance(symbols, list): symbols = [symbols]
-        tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
-        contracts = self.downloader(tickers, **kwargs)
+        contracts = self.downloader(symbols, **kwargs)
         contracts = list(contracts)
         contracts.sort(key=lambda contract: (contract.ticker, contract.expire))
         return contracts
 
-    def downloader(self, tickers, /, **kwargs):
-        for ticker in tickers:
-            contracts = self.page(ticker=ticker, **kwargs)
-            self.results(contracts, title="Downloaded", instrument=Instrument.CONTRACT)
+    def downloader(self, symbols, /, **kwargs):
+        for symbol in symbols:
+            scope = self.scope([symbol.ticker], instrument=Instrument.CONTRACT)
+            contracts = self.page(ticker=symbol.ticker, **kwargs)
+            self.results(scope=scope, size=len(contracts), title="Downloaded")
             for contract in contracts: yield contract
 
 
@@ -243,12 +244,13 @@ class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
     def downloader(self, contracts, /, **kwargs):
         contracts = [contracts[index:index+self.capacity] for index in range(0, len(contracts), self.capacity)]
         for contracts in contracts:
+            scope = self.scope(contracts, instrument=Instrument.OPTION)
             options = self.page(contracts=contracts, **kwargs)
+            self.results(scope=scope, size=len(options), title="Downloaded")
             if options is None: continue
             if bool(options.empty): continue
             contracts = pd.DataFrame.from_records(options["osi"].map(OSI).map(asdict), index=options.index)
             options = pd.concat([options, contracts], axis=1).drop(columns=["osi"], inplace=False)
-            self.results(options, title="Downloaded", instrument=Instrument.OPTION)
             yield options
 
     @staticmethod
