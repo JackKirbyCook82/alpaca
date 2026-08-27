@@ -224,7 +224,7 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
 
     def downloader(self, symbols, /, **kwargs):
         for symbol in symbols:
-            scope = self.scope([symbol.ticker], instrument=Instrument.CONTRACT)
+            scope = self.scope([symbol], instrument=Instrument.STOCK)
             contracts = self.page(ticker=symbol.ticker, **kwargs)
             self.results(scope=scope, size=len(contracts), title="Downloaded")
             for contract in contracts: yield contract
