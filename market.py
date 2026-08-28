@@ -3,6 +3,7 @@
 Created on Thurs Mar 19 2026
 @name:   Alpaca Market Objects
 @author: Jack Kirby Cook
+@file:   alpaca/market.py
 
 """
 
