@@ -8,6 +8,8 @@ Created on Sat May 16 2026
 """
 
 import multiprocessing
+from types import SimpleNamespace
+
 import pandas as pd
 from parse import parse
 from pprint import pformat
@@ -37,7 +39,7 @@ term_mapping = RDict({Terms.MARKET: "market", Terms.LIMIT: "limit", Terms.STOP: 
 position_mapping = RDict({Position.LONG: "buy", Position.SHORT: "sell"})
 intent_mapping = RDict({Intent.OPEN: "open", Intent.CLOSE: "close"})
 
-intent_formatter = lambda position, intent: f"{position[position, False]}_to_{intent_mapping[intent, False]}"
+intent_formatter = lambda value: f"{position_mapping[value.position, False]}_to_{intent_mapping[value.intent, False]}"
 position_formatter = lambda position: position_mapping[position, False]
 tenure_formatter = lambda tenure: tenure_mapping[tenure, False]
 term_formatter = lambda term: intent_mapping[term, False]
@@ -109,13 +111,14 @@ class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
 
 
 class AlpacaOrderPage(WebJSONPage):
-    def execute(self, *args, acquisition, tenure, term, dryrun=False, **kwargs):
+    def __call__(self, *args, acquisition, tenure, term, dryrun=False, **kwargs):
         parameters = dict(authenticator=self.authenticator)
         url = AlpacaOrderURL(**parameters)
-        securities = [{"osi": record.osi, "position": record.position, "intent": (record.postion, acquisition.intent), "quantity": record.quantity} for record in acquisition.records]
-        payload = AlpacaOrderData({"price": acquisition.price, "tenure": tenure, "term": term, "securities": securities})
+        securities = [{"osi": record.osi, "position": record.position, "intent": SimpleNamespace(position=record.position, intent=acquisition.intent), "quantity": record.quantity} for record in acquisition]
+        payload = AlpacaOrderPayload({"price": acquisition.price, "tenure": tenure, "term": term, "securities": securities})
         if bool(dryrun):
-            print("\033[34m" + pformat(url) + "\033[0m")
+            print("\033[34m" + pformat(str(url)) + "\033[0m")
+            print("\033[34m" + pformat(url.headers) + "\033[0m")
             print("\033[34m" + pformat(payload) + "\033[0m")
             return None
         json = self.load(url, payload=payload)
@@ -144,6 +147,7 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderPage):
         if not bool(acquisitions): return pd.DataFrame(columns=order_columns)
         orders = self.uploader(acquisitions, **kwargs)
         if orders is None: return pd.DataFrame(columns=order_columns)
+        if orders.empty: return pd.DataFrame(columns=order_columns)
         orders = pd.concat(list(orders), axis=0)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
@@ -160,9 +164,10 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderPage):
     def uploader(self, acquisitions, /, **kwargs):
         for acquisition in acquisitions:
             order = self.page(acquisition=acquisition, **kwargs)
-            securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in acquisition.records]
+            securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in acquisition]
             self.console("Uploaded", f"Acquisition[{', '.join(securities)}]")
-            self.console("Uploaded", f"Acquisition[Tight={acquisition.tightness:.2f}, Money={acquisition.moneyness:.2f}, Active={acquisition.activity:.2f}]")
+            self.console("Uploaded", f"Acquisition[Moneyness={acquisition.moneyness:+.2f}, Tightness={acquisition.tightness:+.2f}, Activity={acquisition.activity:+.2f}]")
+            self.console("Uploaded", f"Acquisition[ZSpread={acquisition.zspread:+.2f}, Multiple={acquisition.multiple:+.2f}, Ratio={acquisition.ratio:+.2f}]")
             yield order
 
     @property

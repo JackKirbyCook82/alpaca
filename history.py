@@ -116,8 +116,8 @@ class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
             scope = self.scope(symbols, instrument=Instrument.STOCK)
             tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
             bars = self.page(tickers=tickers, **kwargs)
-            self.results(scope=scope, size=len(bars), title="Downloaded")
             if bool(bars.empty): continue
+            self.results(scope=scope, size=len(bars), title="Downloaded")
             yield bars
 
 
