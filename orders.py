@@ -112,8 +112,7 @@ class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
 
 class AlpacaOrderPage(WebJSONPage):
     def __call__(self, *args, acquisition, tenure, term, dryrun=False, **kwargs):
-        parameters = dict(authenticator=self.authenticator)
-        url = AlpacaOrderURL(**parameters)
+        url = AlpacaOrderURL(authenticator=self.authenticator)
         securities = [{"osi": record.osi, "position": record.position, "intent": SimpleNamespace(position=record.position, intent=acquisition.intent), "quantity": record.quantity} for record in acquisition]
         payload = AlpacaOrderPayload({"price": acquisition.price, "tenure": tenure, "term": term, "securities": securities})
         if bool(dryrun):
