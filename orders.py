@@ -42,7 +42,7 @@ intent_mapping = RDict({Intent.OPEN: "open", Intent.CLOSE: "close"})
 intent_formatter = lambda value: f"{position_mapping[value.position, False]}_to_{intent_mapping[value.intent, False]}"
 position_formatter = lambda position: position_mapping[position, False]
 tenure_formatter = lambda tenure: tenure_mapping[tenure, False]
-term_formatter = lambda term: intent_mapping[term, False]
+term_formatter = lambda term: term_mapping[term, False]
 quantity_formatter = lambda quantity: f"{quantity:.0f}"
 price_formatter = lambda price: f"{price:.2f}"
 
@@ -146,8 +146,8 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderPage):
         acquisitions = list(acquisitions)
         if not bool(acquisitions): return pd.DataFrame(columns=order_columns)
         orders = self.uploader(acquisitions, **kwargs)
-        if orders is None: return pd.DataFrame(columns=order_columns)
-        if orders.empty: return pd.DataFrame(columns=order_columns)
+        orders = list(orders)
+        if not bool(orders): return pd.DataFrame(columns=order_columns)
         orders = pd.concat(list(orders), axis=0)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
@@ -164,6 +164,8 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderPage):
     def uploader(self, acquisitions, /, **kwargs):
         for acquisition in acquisitions:
             order = self.page(acquisition=acquisition, **kwargs)
+            if order is None: continue
+            if bool(order.empty): continue
             securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in acquisition]
             self.console("Uploaded", f"Acquisition[{', '.join(securities)}]")
             self.console("Uploaded", f"Acquisition[Moneyness={acquisition.moneyness:+.2f}, Tightness={acquisition.tightness:+.2f}, Activity={acquisition.activity:+.2f}]")
