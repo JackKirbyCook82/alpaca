@@ -34,6 +34,7 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
+status_mapping = RDict({Status.PENDING: "pending_new", Status.PARTIAL: "partially_filled", Status.CANCELING: "pending_cancel", Status.ACCEPTED: "accepted_for_bidding"})
 tenure_mapping = RDict({Tenure.DAY: "day", Tenure.GTC: "gtc", Tenure.FOK: "fok"})
 term_mapping = RDict({Terms.MARKET: "market", Terms.LIMIT: "limit", Terms.STOP: "stop"})
 position_mapping = RDict({Position.LONG: "buy", Position.SHORT: "sell"})
@@ -51,6 +52,7 @@ ticker_parser = lambda string: OSI.parse(string).ticker
 expire_parser = lambda string: OSI.parse(string).expire
 option_parser = lambda string: OSI.parse(string).option
 strike_parser = lambda string: OSI.parse(string).strike
+status_parser = lambda string: status_mapping[string, True] if string in status_mapping.values() else Status[str(string).upper()]
 intent_parser = lambda string: intent_mapping[parse("{position}_to_{intent}", string)["intent"], True]
 position_parser = lambda string: position_mapping[string, True]
 tenure_parser = lambda string: tenure_mapping[string, True]
@@ -77,6 +79,9 @@ class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v
     def headers(*args, authenticator, **kwargs):
         return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
+class AlpacaRetrieveOrderURL(AlpacaOrderURL, parameters={"status": "open", "limit": 500, "nested": "true"}): pass
+class AlpacaPlaceOrderURL(AlpacaOrderURL): pass
+
 
 class AlpacaOrderPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "qty": "1"}, multiple=False, optional=False):
     class Price(WebPayload.Value, key="price", locator="limit_price", parser=price_formatter): pass
@@ -97,7 +102,7 @@ class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
     class Expired(WebJSON.Text, key="expired", locator="expired_at", parser=timestamp_parser): pass
     class Canceled(WebJSON.Text, key="canceled", locator="canceled_at", parser=timestamp_parser): pass
     class Failed(WebJSON.Text, key="failed", locator="failed_at", parser=timestamp_parser): pass
-    class Status(WebJSON.Text, key="status", locator="status", parser=Status): pass
+    class Status(WebJSON.Text, key="status", locator="status", parser=status_parser): pass
     class Tenure(WebJSON.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
     class Term(WebJSON.Text, key="term", locator="type", parser=term_parser): pass
     class Securities(WebJSON.Mapping, key="securities", locator="legs", parser=dict, multiple=True, optional=False):
@@ -132,7 +137,7 @@ class AlpacaOrderPage(WebJSONPage):
         return order[order_columns]
 
 
-class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderPage):
+class AlpacaOrderUploader(WebStream, Logging, page={"order": AlpacaOrderPage, "account": AlpacaAccountPage}):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__mutex = multiprocessing.Lock()
