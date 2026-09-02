@@ -10,7 +10,6 @@ Created on Sat May 16 2026
 import multiprocessing
 import pandas as pd
 from parse import parse
-from pprint import pformat
 from types import SimpleNamespace
 from datetime import date as Date
 from datetime import datetime as Datetime
@@ -33,7 +32,7 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-status_mapping = RDict({Status.PENDING: "pending_new", Status.PARTIAL: "partially_filled", Status.CANCELING: "pending_cancel", Status.ACCEPTED: "accepted_for_bidding"})
+status_mapping = RDict({Status.EXECUTING: "new", Status.PARTIAL: "partially_filled"})
 tenure_mapping = RDict({Tenure.DAY: "day", Tenure.GTC: "gtc", Tenure.FOK: "fok"})
 term_mapping = RDict({Terms.MARKET: "market", Terms.LIMIT: "limit", Terms.STOP: "stop"})
 position_mapping = RDict({Position.LONG: "buy", Position.SHORT: "sell"})
@@ -46,17 +45,17 @@ term_formatter = lambda term: term_mapping[term, False]
 quantity_formatter = lambda quantity: f"{quantity:.0f}"
 price_formatter = lambda price: f"{price:.2f}"
 
-timestamp_parser = lambda string: pd.to_datetime(string)
-ticker_parser = lambda string: OSI.parse(string).ticker
-expire_parser = lambda string: OSI.parse(string).expire
-option_parser = lambda string: OSI.parse(string).option
-strike_parser = lambda string: OSI.parse(string).strike
-status_parser = lambda string: status_mapping[string, True] if string in status_mapping.values() else Status[str(string).upper()]
+status_parser = lambda string: status_mapping[string, True] if (string, True) in status_mapping else Status[str(string).upper()]
 intent_parser = lambda string: intent_mapping[parse("{position}_to_{intent}", string)["intent"], True]
 position_parser = lambda string: position_mapping[string, True]
 tenure_parser = lambda string: tenure_mapping[string, True]
 term_parser = lambda string: term_mapping[string, True]
 quantity_parser = lambda string: abs(int(string))
+timestamp_parser = lambda string: pd.to_datetime(string)
+ticker_parser = lambda string: OSI.parse(string).ticker
+expire_parser = lambda string: OSI.parse(string).expire
+option_parser = lambda string: OSI.parse(string).option
+strike_parser = lambda string: OSI.parse(string).strike
 
 order_typing = {"date": Datetime, "order": str, "asset": str, "spread": int, "ticker": str, "expire": Date, "option": int, "strike": float, "position": int, "quantity": int}
 order_formatting = {"spread": int, "expire": lambda expire: expire.strftime("%Y%m%d"), "option": int, "position": int}
@@ -104,13 +103,13 @@ class AlpacaOrderUploadPayload(WebPayload.Mapping, mapping={"order_class": "mleg
         class Quantity(WebPayload.Value, key="quantity", locator="ratio_qty", parser=quantity_formatter): pass
 
 
-class AlpacaOrderData(WebJSON.Mapping, multiple=False, optional=False):
+class AlpacaOrderData(WebJSON, multiple=False, optional=False):
     class Order(WebJSON.Text, key="order", locator="id", parser=str): pass
     class Date(WebJSON.Text, key="date", locator="created_at", parser=timestamp_parser): pass
     class Status(WebJSON.Text, key="status", locator="status", parser=status_parser): pass
     class Tenure(WebJSON.Text, key="tenure", locator="time_in_force", parser=tenure_parser): pass
     class Term(WebJSON.Text, key="term", locator="type", parser=term_parser): pass
-    class Securities(WebJSON.Mapping, key="securities", locator="legs", parser=dict, multiple=True, optional=False):
+    class Securities(WebJSON, key="securities", locator="legs", multiple=True, optional=False):
         class Asset(WebJSON.Text, key="asset", locator="asset_id", parser=str): pass
         class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
         class Expire(WebJSON.Text, key="expire", locator="expire", parser=expire_parser): pass
@@ -134,15 +133,10 @@ class AlpacaOrderPage(WebJSONPage):
 
 
 class AlpacaOrderUploadPage(AlpacaOrderPage):
-    def __call__(self, *args, prospect, tenure, term, dryrun=False, **kwargs):
+    def __call__(self, *args, prospect, tenure, term, **kwargs):
         url = AlpacaOrderUploadURL(authenticator=self.authenticator)
         securities = [{"osi": record.osi, "position": record.position, "intent": SimpleNamespace(position=record.position, intent=prospect.intent), "quantity": record.quantity} for record in prospect]
         payload = AlpacaOrderUploadPayload({"price": prospect.price, "tenure": tenure, "term": term, "securities": securities})
-        if bool(dryrun):
-            print("\033[34m" + pformat(str(url)) + "\033[0m")
-            print("\033[34m" + pformat(url.headers) + "\033[0m")
-            print("\033[34m" + pformat(payload) + "\033[0m")
-            return None
         json = self.load(url, payload=payload)
         orders = self.orders(json, *args, **kwargs)
         return orders
@@ -150,8 +144,7 @@ class AlpacaOrderUploadPage(AlpacaOrderPage):
 
 class AlpacaOrderDownloadPage(AlpacaOrderPage):
     def __call__(self, *args, tickers, dates, **kwargs):
-        parameters = dict(tickers=tickers, dates=dates)
-        url = AlpacaOrderDownloadURL(authenticator=self.authenticator, **parameters)
+        url = AlpacaOrderDownloadURL(tickers=tickers, dates=dates, authenticator=self.authenticator)
         json = self.load(url, payload=None)
         orders = self.orders(json, *args, **kwargs)
         return orders
