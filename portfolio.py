@@ -8,6 +8,7 @@ Created on Sun Jul 5 2026
 """
 
 import pandas as pd
+from types import SimpleNamespace
 
 from finance.enumerations import Instrument, Position
 from finance.logging import Logging
@@ -25,6 +26,7 @@ __license__ = "MIT License"
 
 
 position_mapping = RDict({Position.LONG: "buy", Position.SHORT: "sell"})
+timestamp_parser = lambda string: pd.to_datetime(string)
 position_parser = lambda string: position_mapping[string, True]
 ticker_parser = lambda string: OSI.parse(string).ticker
 expire_parser = lambda string: OSI.parse(string).expire
@@ -33,13 +35,16 @@ strike_parser = lambda string: OSI.parse(string).strike
 portfolio_columns = ["asset", "ticker", "expire", "option", "strike", "position", "quantity", "entry"]
 
 
-class AlpacaPortfolioURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "positions"], headers={"accept": "application/json"}):
+class AlpacaPortfolioURL(WebURL, domain="https://paper-api.alpaca.markets"):
     @staticmethod
     def headers(*args, authenticator, **kwargs):
         return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
+class AlpacaHoldingsURL(WebURL, path=["v2", "account"], headers={"accept": "application/json"}): pass
+class AlpacaAccountURL(WebURL, path=["v2", "positions"], headers={"accept": "application/json"}): pass
 
-class AlpacaPortfolioData(WebJSON, multiple=True, optional=True):
+
+class AlpacaHoldingsData(WebJSON, multiple=True, optional=True):
     class Asset(WebJSON.Text, key="asset", locator="asset_id", parser=str): pass
     class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
     class Expire(WebJSON.Text, key="expire", locator="symbol", parser=expire_parser): pass
@@ -49,27 +54,44 @@ class AlpacaPortfolioData(WebJSON, multiple=True, optional=True):
     class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=int): pass
     class Entry(WebJSON.Text, key="entry", locator="avg_entry_price", parser=float): pass
 
+class AlpacaAccountData(WebJSON, multiple=False, optional=False):
+    class Identity(WebJSON.Text, key="identity", locator="account_number", parser=str): pass
+    class Date(WebJSON.Text, key="date", locator="balance_asof", parser=timestamp_parser): pass
+    class Cash(WebJSON.Text, key="cash", locator="cash", parser=float): pass
+    class Value(WebJSON.Text, key="value", locator="portfolio_value", parser=float): pass
 
-class AlpacaPortfolioPage(WebJSONPage):
+
+class AlpacaHoldingsPage(WebJSONPage):
     def __call__(self, *args, **kwargs):
         url = AlpacaPortfolioURL(authenticator=self.authenticator)
         json = self.load(url)
-        datas = AlpacaPortfolioData(json, *args, **kwargs)
+        datas = AlpacaHoldingsData(json, *args, **kwargs)
         records = [data(*args, **kwargs) for data in datas]
         dataframe = pd.DataFrame.from_records(records)
         dataframe["expire"] = pd.to_datetime(dataframe["expire"])
         dataframe["strike"] = pd.to_numeric(dataframe["strike"])
         return dataframe
 
+class AlpacaAccountPage(WebJSONPage):
+    def __call__(self, *args, **kwargs):
+        url = AlpacaAccountURL(authenticator=self.authenticator)
+        json = self.load(url)
+        datas = AlpacaAccountData(json, *args, **kwargs)
+        mapping = datas(*args, **kwargs)
+        series = pd.Series(mapping)
+        return series
 
-class AlpacaPortfolioDownloader(WebStream, Logging, page=AlpacaPortfolioPage):
-    def __call__(self, **kwargs):
-        portfolio = self.page(**kwargs)
-        if bool(portfolio.empty): return pd.DataFrame(columns=portfolio_columns)
-        portfolio = portfolio.sort_values(by=["asset"], inplace=False)
-        portfolio = portfolio.reset_index(drop=True, inplace=False)
-        scope = self.scope(portfolio, instrument=Instrument.OPTION)
-        self.results(scope=scope, size=len(portfolio.index), title="Downloaded")
+
+class AlpacaPortfolioDownloader(WebStream, Logging, pages={"holdings": AlpacaHoldingsPage, "account": AlpacaAccountPage}):
+    def __call__(self, /, **kwargs):
+        holdings = self.page["holdings"](**kwargs)
+        if bool(holdings.empty): holdings = pd.DataFrame(columns=portfolio_columns)
+        holdings = holdings.sort_values(by=["asset"], inplace=False)
+        holdings = holdings.reset_index(drop=True, inplace=False)
+        account = self.page["account"](**kwargs)
+        scope = self.scope(holdings, instrument=Instrument.OPTION)
+        self.results(scope=scope, size=len(holdings.index), title="Downloaded")
+        portfolio = SimpleNamespace(holdings=holdings, account=account)
         return portfolio
 
 
