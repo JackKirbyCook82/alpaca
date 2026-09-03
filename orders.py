@@ -52,10 +52,10 @@ tenure_parser = lambda string: tenure_mapping[string, True]
 term_parser = lambda string: term_mapping[string, True]
 quantity_parser = lambda string: abs(int(string))
 timestamp_parser = lambda string: pd.to_datetime(string)
-ticker_parser = lambda string: OSI.parse(string).ticker
-expire_parser = lambda string: OSI.parse(string).expire
-option_parser = lambda string: OSI.parse(string).option
-strike_parser = lambda string: OSI.parse(string).strike
+ticker_parser = lambda string: OSI(string).ticker
+expire_parser = lambda string: OSI(string).expire
+option_parser = lambda string: OSI(string).option
+strike_parser = lambda string: OSI(string).strike
 
 order_typing = {"date": Datetime, "order": str, "asset": str, "spread": int, "ticker": str, "expire": Date, "option": int, "strike": float, "position": int, "quantity": int}
 order_formatting = {"spread": int, "expire": lambda expire: expire.strftime("%Y%m%d"), "option": int, "position": int}
@@ -87,9 +87,9 @@ class AlpacaOrderDownloadURL(AlpacaOrderURL, parameters={"limit": 500, "nested":
         return tickers | dates
 
     @staticmethod
-    def tickers(*args, tickers, **kwargs): return {"symbols": ",".join(list(tickers))}
-    @staticmethod
     def dates(*args, dates, **kwargs): return {"after": dates.minimum.strftime("%Y-%m-%d"), "until": dates.maximum.strftime("%Y-%m-%d")}
+    @staticmethod
+    def tickers(*args, tickers, **kwargs): return {"symbols": ",".join(list(tickers))}
 
 
 class AlpacaOrderUploadPayload(WebPayload.Mapping, mapping={"order_class": "mleg", "qty": "1"}, multiple=False, optional=False):
@@ -112,9 +112,9 @@ class AlpacaOrderData(WebJSON, multiple=False, optional=False):
     class Securities(WebJSON, key="securities", locator="legs", multiple=True, optional=False):
         class Asset(WebJSON.Text, key="asset", locator="asset_id", parser=str): pass
         class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
-        class Expire(WebJSON.Text, key="expire", locator="expire", parser=expire_parser): pass
-        class Option(WebJSON.Text, key="option", locator="option", parser=option_parser): pass
-        class Strike(WebJSON.Text, key="strike", locator="strike", parser=strike_parser): pass
+        class Expire(WebJSON.Text, key="expire", locator="symbol", parser=expire_parser): pass
+        class Option(WebJSON.Text, key="option", locator="symbol", parser=option_parser): pass
+        class Strike(WebJSON.Text, key="strike", locator="symbol", parser=strike_parser): pass
         class Position(WebJSON.Text, key="position", locator="side", parser=position_parser): pass
         class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=quantity_parser): pass
 
@@ -129,7 +129,7 @@ class AlpacaOrderPage(WebJSONPage):
         orders = pd.DataFrame.from_records(records)
         orders["expire"] = pd.to_datetime(orders["expire"])
         orders["strike"] = pd.to_numeric(orders["strike"])
-        return orders[order_columns]
+        return orders
 
 
 class AlpacaOrderUploadPage(AlpacaOrderPage):
