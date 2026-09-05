@@ -42,11 +42,13 @@ intent_formatter = lambda value: f"{position_mapping[value.position, False]}_to_
 position_formatter = lambda position: position_mapping[position, False]
 tenure_formatter = lambda tenure: tenure_mapping[tenure, False]
 term_formatter = lambda term: term_mapping[term, False]
+date_formatter = lambda date: date.strftime("%Y%m%d")
 quantity_formatter = lambda quantity: f"{quantity:.0f}"
 price_formatter = lambda price: f"{price:.2f}"
 
 status_parser = lambda string: status_mapping[string, True] if (string, True) in status_mapping else Status[str(string).upper()]
 intent_parser = lambda string: intent_mapping[parse("{position}_to_{intent}", string)["intent"], True]
+date_parser = lambda string: Datetime.strptime(string, "%Y%m%d").date()
 position_parser = lambda string: position_mapping[string, True]
 tenure_parser = lambda string: tenure_mapping[string, True]
 term_parser = lambda string: term_mapping[string, True]
@@ -57,10 +59,10 @@ expire_parser = lambda string: OSI(string).expire
 option_parser = lambda string: OSI(string).option
 strike_parser = lambda string: OSI(string).strike
 
-order_typing = {"date": Datetime, "order": str, "asset": str, "spread": int, "ticker": str, "expire": Date, "option": int, "strike": float, "position": int, "quantity": int}
-order_formatting = {"spread": int, "expire": lambda expire: expire.strftime("%Y%m%d"), "option": int, "position": int}
-order_parsing = {"spread": Spread, "expire": lambda string: Datetime.strptime(string, "%Y%m%d").date(), "option": Option, "position": Position}
-order_columns = ["order", "asset", "spread", "ticker", "expire", "option", "strike", "position", "quantity"]
+order_typing = {"date": Datetime, "order": str, "asset": str, "term": int, "tenure": int, "spread": int, "ticker": str, "expire": Date, "option": int, "strike": float, "position": int, "quantity": int}
+order_formatting = {"date": date_formatter, "term": int, "tenure": int, "spread": int, "expire": date_formatter, "option": int, "position": int}
+order_parsing = {"term": Terms, "tenure": Tenure, "spread": Spread, "expire": date_parser, "option": Option, "position": Position}
+order_columns = ["order", "asset", "date", "term", "tenure", "spread", "ticker", "expire", "option", "strike", "position", "quantity"]
 order_header = Header(order_columns, order_typing, order_formatting, order_parsing)
 
 
@@ -168,7 +170,7 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderUploadPage):
         orders = pd.concat(list(orders), axis=0)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
-        scope = self.scope(orders, instruments=Instrument.OPTION)
+        scope = self.scope(orders, instrument=Instrument.OPTION)
         self.results(scope=scope, size=len(orders.index), title="Uploaded")
         return orders
 
