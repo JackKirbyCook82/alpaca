@@ -223,10 +223,11 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
         contracts.sort(key=lambda contract: (contract.ticker, contract.expire))
         return contracts
 
-    def downloader(self, symbols, /, **kwargs):
+    def downloader(self, symbols, /, expires, strikes, **kwargs):
         for symbol in symbols:
             scope = self.scope([symbol], instrument=Instrument.STOCK)
-            contracts = self.page(ticker=symbol.ticker, **kwargs)
+            parameters = dict(ticker=symbol.ticker, expires=expires, strikes=strikes)
+            contracts = self.page(**parameters, **kwargs)
             self.results(scope=scope, size=len(contracts), title="Downloaded")
             for contract in contracts: yield contract
 

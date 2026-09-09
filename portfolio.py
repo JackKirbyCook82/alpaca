@@ -67,6 +67,7 @@ class AlpacaHoldingsPage(WebJSONPage):
         json = self.load(url)
         datas = AlpacaHoldingsData(json, *args, **kwargs)
         records = [data(*args, **kwargs) for data in datas]
+        if not records: return None
         dataframe = pd.DataFrame.from_records(records)
         dataframe["expire"] = pd.to_datetime(dataframe["expire"])
         dataframe["strike"] = pd.to_numeric(dataframe["strike"])

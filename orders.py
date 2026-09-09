@@ -128,6 +128,7 @@ class AlpacaOrderPage(WebJSONPage):
         mapping = data(*args, **kwargs)
         records = mapping.pop("securities")
         records = [mapping | record for record in records]
+        if not records: return None
         orders = pd.DataFrame.from_records(records)
         orders["expire"] = pd.to_datetime(orders["expire"])
         orders["strike"] = pd.to_numeric(orders["strike"])
@@ -135,10 +136,10 @@ class AlpacaOrderPage(WebJSONPage):
 
 
 class AlpacaOrderUploadPage(AlpacaOrderPage):
-    def __call__(self, *args, prospect, tenure, term, **kwargs):
+    def __call__(self, *args, target, tenure, term, **kwargs):
         url = AlpacaOrderUploadURL(authenticator=self.authenticator)
-        securities = [{"osi": record.osi, "position": record.position, "intent": SimpleNamespace(position=record.position, intent=prospect.intent), "quantity": record.quantity} for record in prospect]
-        payload = AlpacaOrderUploadPayload({"price": prospect.price, "tenure": tenure, "term": term, "securities": securities})
+        securities = [{"osi": record.osi, "position": record.position, "intent": SimpleNamespace(position=record.position, intent=target.intent), "quantity": record.quantity} for record in target]
+        payload = AlpacaOrderUploadPayload({"price": target.price, "tenure": tenure, "term": term, "securities": securities})
         json = self.load(url, payload=payload)
         orders = self.orders(json, *args, **kwargs)
         return orders
@@ -158,13 +159,13 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderUploadPage):
         self.__mutex = multiprocessing.Lock()
         self.__history = set()
 
-    def __call__(self, prospects, /, **kwargs):
-        assert isinstance(prospects, list)
-        if not bool(prospects): return pd.DataFrame(columns=order_columns)
-        prospects = self.filter(prospects, **kwargs)
-        prospects = list(prospects)
-        if not bool(prospects): return pd.DataFrame(columns=order_columns)
-        orders = self.uploader(prospects, **kwargs)
+    def __call__(self, targets, /, **kwargs):
+        assert isinstance(targets, list)
+        if not bool(targets): return pd.DataFrame(columns=order_columns)
+        targets = self.filter(targets, **kwargs)
+        targets = list(targets)
+        if not bool(targets): return pd.DataFrame(columns=order_columns)
+        orders = self.uploader(targets, **kwargs)
         orders = list(orders)
         if not bool(orders): return pd.DataFrame(columns=order_columns)
         orders = pd.concat(list(orders), axis=0)
@@ -174,22 +175,22 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderUploadPage):
         self.results(scope=scope, size=len(orders.index), title="Uploaded")
         return orders
 
-    def filter(self, prospects, /, **kwargs):
-        for prospect in prospects:
-            if prospect.signature in self.history: continue
-            with self.mutex: self.history.add(prospect.signature)
-            yield prospect
+    def filter(self, targets, /, **kwargs):
+        for target in targets:
+            if target.signature in self.history: continue
+            with self.mutex: self.history.add(target.signature)
+            yield target
 
-    def uploader(self, prospects, /, **kwargs):
-        for prospect in prospects:
-            order = self.page(prospect=prospect, **kwargs)
-            order["spread"] = prospect.spread
+    def uploader(self, targets, /, **kwargs):
+        for target in targets:
+            order = self.page(target=target, **kwargs)
+            order["spread"] = target.spread
             if order is None: continue
             if bool(order.empty): continue
-            securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in prospect]
-            self.console("Uploaded", f"Prospect[{', '.join(securities)}]")
-            self.console("Uploaded", f"Prospect[Moneyness={prospect.moneyness:+.2f}, Tightness={prospect.tightness:+.2f}, Activity={prospect.activity:+.2f}]")
-            self.console("Uploaded", f"Prospect[ZSpread={prospect.zspread:+.2f}, Multiple={prospect.multiple:+.2f}, Ratio={prospect.ratio:+.2f}]")
+#            securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in target]
+#            self.console("Uploaded", f"Target[{', '.join(securities)}]")
+#            self.console("Uploaded", f"Target[Moneyness={target.moneyness:+.2f}, Tightness={target.tightness:+.2f}, Activity={target.activity:+.2f}]")
+#            self.console("Uploaded", f"Target[ZSpread={target.zspread:+.2f}, Multiple={float(target.multiple):+.2f}, Ratio={float(target.ratio):+.2f}]")
             yield order
 
     @property
