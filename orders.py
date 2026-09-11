@@ -187,10 +187,6 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderUploadPage):
             order["spread"] = target.spread
             if order is None: continue
             if bool(order.empty): continue
-#            securities = [f"{str(record.osi)}={int(record.position) * int(record.quantity):.0f}" for record in target]
-#            self.console("Uploaded", f"Target[{', '.join(securities)}]")
-#            self.console("Uploaded", f"Target[Moneyness={target.moneyness:+.2f}, Tightness={target.tightness:+.2f}, Activity={target.activity:+.2f}]")
-#            self.console("Uploaded", f"Target[ZSpread={target.zspread:+.2f}, Multiple={float(target.multiple):+.2f}, Ratio={float(target.ratio):+.2f}]")
             yield order
 
     @property

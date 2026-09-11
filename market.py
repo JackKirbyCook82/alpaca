@@ -252,14 +252,8 @@ class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
             if bool(options.empty): continue
             self.results(scope=scope, size=len(options), title="Downloaded")
             contracts = pd.DataFrame.from_records(options["osi"].map(OSI).map(asdict), index=options.index)
-            options = pd.concat([options, contracts], axis=1).drop(columns=["osi"], inplace=False)
+            options = pd.concat([options, contracts], axis=1)
             yield options
 
-    @staticmethod
-    def unpack(options):
-        series = options.pop("osi").apply(OSI)
-        options["ticker"] = series.apply(lambda osi: osi.ticker)
-        options["expire"] = series.apply(lambda osi: osi.expire)
-        options["option"] = series.apply(lambda osi: osi.option)
-        options["strike"] = series.apply(lambda osi: osi.strike)
-        return options
+
+
