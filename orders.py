@@ -7,14 +7,13 @@ Created on Sat May 16 2026
 
 """
 
+import math
 import multiprocessing
 import pandas as pd
-from parse import parse
-from types import SimpleNamespace
 from datetime import date as Date
 from datetime import datetime as Datetime
 
-from finance.enumerations import Instrument, Option, Position, Status, Tenure, Terms, Intent, Spread
+from finance.enumerations import Instrument, Option, Position, Status, Tenure, Terms, Intent, Action, Spread
 from finance.logging import Logging
 from finance.osi import OSI
 from webscraping.webpages import WebStream, WebJSONPage
@@ -35,21 +34,18 @@ __license__ = "MIT License"
 status_mapping = RDict({Status.EXECUTING: "new", Status.PARTIAL: "partially_filled"})
 tenure_mapping = RDict({Tenure.DAY: "day", Tenure.GTC: "gtc", Tenure.FOK: "fok"})
 term_mapping = RDict({Terms.MARKET: "market", Terms.LIMIT: "limit", Terms.STOP: "stop"})
-position_mapping = RDict({Position.LONG: "buy", Position.SHORT: "sell"})
-intent_mapping = RDict({Intent.OPEN: "open", Intent.CLOSE: "close"})
 
-intent_formatter = lambda value: f"{position_mapping[value.position, False]}_to_{intent_mapping[value.intent, False]}"
-position_formatter = lambda position: position_mapping[position, False]
+purpose_formatter = lambda purpose: f"{str(purpose.action).lower()}_to_{str(purpose.intent).lower()}"
 tenure_formatter = lambda tenure: tenure_mapping[tenure, False]
 term_formatter = lambda term: term_mapping[term, False]
+action_formatter = lambda action: str(action).lower()
 date_formatter = lambda date: date.strftime("%Y%m%d")
 quantity_formatter = lambda quantity: f"{quantity:.0f}"
 price_formatter = lambda price: f"{price:.2f}"
 
+position_parser = lambda string: Position(math.prod(list(map(int, [function(str(value).upper()) for function, value in zip([Action, Intent], str(string).split("_to_"))]))))
 status_parser = lambda string: status_mapping[string, True] if (string, True) in status_mapping else Status[str(string).upper()]
-intent_parser = lambda string: intent_mapping[parse("{position}_to_{intent}", string)["intent"], True]
 date_parser = lambda string: Datetime.strptime(string, "%Y%m%d").date()
-position_parser = lambda string: position_mapping[string, True]
 tenure_parser = lambda string: tenure_mapping[string, True]
 term_parser = lambda string: term_mapping[string, True]
 quantity_parser = lambda string: abs(int(string))
@@ -100,8 +96,8 @@ class AlpacaOrderUploadPayload(WebPayload.Mapping, mapping={"order_class": "mleg
     class Terms(WebPayload.Value, key="term", locator="type", parser=term_formatter): pass
     class Securities(WebPayload.Mapping, key="securities", locator="legs", multiple=True, optional=False):
         class Osi(WebPayload.Value, key="osi", locator="symbol"): pass
-        class Intent(WebPayload.Value, key="intent", locator="position_intent", parser=intent_formatter): pass
-        class Position(WebPayload.Value, key="position", locator="side", parser=position_formatter): pass
+        class Purpose(WebPayload.Value, key="purpose", locator="purpose", parser=purpose_formatter): pass
+        class Action(WebPayload.Value, key="action", locator="side", parser=action_formatter): pass
         class Quantity(WebPayload.Value, key="quantity", locator="ratio_qty", parser=quantity_formatter): pass
 
 
@@ -117,7 +113,7 @@ class AlpacaOrderData(WebJSON, multiple=False, optional=False):
         class Expire(WebJSON.Text, key="expire", locator="symbol", parser=expire_parser): pass
         class Option(WebJSON.Text, key="option", locator="symbol", parser=option_parser): pass
         class Strike(WebJSON.Text, key="strike", locator="symbol", parser=strike_parser): pass
-        class Position(WebJSON.Text, key="position", locator="side", parser=position_parser): pass
+        class Position(WebJSON.Text, key="position", locator="position_intent", parser=position_parser): pass
         class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=quantity_parser): pass
 
 
@@ -138,7 +134,7 @@ class AlpacaOrderPage(WebJSONPage):
 class AlpacaOrderUploadPage(AlpacaOrderPage):
     def __call__(self, *args, target, tenure, term, **kwargs):
         url = AlpacaOrderUploadURL(authenticator=self.authenticator)
-        securities = [{"osi": record.osi, "position": record.position, "intent": SimpleNamespace(position=record.position, intent=target.intent), "quantity": record.quantity} for record in target]
+        securities = [{"osi": record.osi, "purpose": record.purpose, "action": record.action, "quantity": record.quantity} for record in target]
         payload = AlpacaOrderUploadPayload({"price": target.price, "tenure": tenure, "term": term, "securities": securities})
         json = self.load(url, payload=payload)
         orders = self.orders(json, *args, **kwargs)
@@ -162,11 +158,9 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderUploadPage):
     def __call__(self, targets, /, **kwargs):
         assert isinstance(targets, list)
         if not bool(targets): return pd.DataFrame(columns=order_columns)
-        targets = self.filter(targets, **kwargs)
-        targets = list(targets)
+        targets = list(self.filter(targets, **kwargs))
         if not bool(targets): return pd.DataFrame(columns=order_columns)
-        orders = self.uploader(targets, **kwargs)
-        orders = list(orders)
+        orders = list(self.uploader(targets, **kwargs))
         if not bool(orders): return pd.DataFrame(columns=order_columns)
         orders = pd.concat(list(orders), axis=0)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
@@ -184,9 +178,8 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderUploadPage):
     def uploader(self, targets, /, **kwargs):
         for target in targets:
             order = self.page(target=target, **kwargs)
+            if order is None or bool(order.empty): continue
             order["spread"] = target.spread
-            if order is None: continue
-            if bool(order.empty): continue
             yield order
 
     @property
@@ -198,9 +191,7 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderUploadPage):
 class AlpacaOrderDownloader(WebStream, Logging, page=AlpacaOrderDownloadPage):
     def __call__(self, /, **kwargs):
         orders = self.page(**kwargs)
-        orders = list(orders)
-        if not bool(orders): return pd.DataFrame(columns=order_columns)
-        orders = pd.concat(list(orders), axis=0)
+        if orders is None or bool(orders.empty): return pd.DataFrame(columns=order_columns)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
         scope = self.scope(orders, instruments=Instrument.OPTION)

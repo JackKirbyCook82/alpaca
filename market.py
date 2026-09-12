@@ -62,8 +62,9 @@ class AlpacaContractURL(AlpacaMarketURL, domain="https://paper-api.alpaca.market
     def parameters(cls, *args, **kwargs):
         tickers = cls.tickers(*args, **kwargs)
         expires = cls.expires(*args, **kwargs)
+        strikes = cls.strikes(*args, **kwargs)
         pagination = cls.pagination(*args, **kwargs)
-        return tickers | expires | pagination
+        return tickers | expires | strikes | pagination
 
     @staticmethod
     def tickers(*args, ticker, **kwargs):
@@ -209,8 +210,7 @@ class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
             scope = self.scope(symbols, instrument=Instrument.STOCK)
             tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
             stocks = self.page(tickers=tickers, **kwargs)
-            if stocks is None: continue
-            if bool(stocks.empty): continue
+            if stocks is None or bool(stocks.empty): continue
             self.results(scope=scope, size=len(stocks), title="Downloaded")
             yield stocks
 
@@ -248,8 +248,7 @@ class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
         for contracts in contracts:
             scope = self.scope(contracts, instrument=Instrument.OPTION)
             options = self.page(contracts=contracts, **kwargs)
-            if options is None: continue
-            if bool(options.empty): continue
+            if options is None or bool(options.empty): continue
             self.results(scope=scope, size=len(options), title="Downloaded")
             contracts = pd.DataFrame.from_records(options["osi"].map(OSI).map(asdict), index=options.index)
             options = pd.concat([options, contracts], axis=1)

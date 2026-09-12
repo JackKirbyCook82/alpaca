@@ -77,6 +77,7 @@ class AlpacaBarsPage(AlpacaHistoryPage):
     def __call__(self, *args, tickers, history, **kwargs):
         parameters = dict(tickers=tickers, history=history, authenticator=self.authenticator)
         records = self.bars(**parameters)
+        if not records: return None
         bars = pd.DataFrame.from_records(records)
         return bars
 
@@ -116,7 +117,7 @@ class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
             scope = self.scope(symbols, instrument=Instrument.STOCK)
             tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
             bars = self.page(tickers=tickers, **kwargs)
-            if bool(bars.empty): continue
+            if bars is None or bool(bars.empty): continue
             self.results(scope=scope, size=len(bars), title="Downloaded")
             yield bars
 
