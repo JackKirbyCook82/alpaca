@@ -13,10 +13,11 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
 from finance.enumerations import Instrument
-from finance.logging import Logging
+from finance.reporting import Results
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
+from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -96,7 +97,7 @@ class AlpacaBarsPage(AlpacaHistoryPage):
     def parser(self): return self.__parser
 
 
-class AlpacaHistoryDownloader(WebStream, Logging, ABC):
+class AlpacaHistoryDownloader(WebStream, Results, Logging, ABC):
     @abstractmethod
     def downloader(self, *args, **kwargs): pass
 
@@ -118,7 +119,8 @@ class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
             tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
             bars = self.page(tickers=tickers, **kwargs)
             if bars is None or bool(bars.empty): continue
-            self.results(scope=scope, size=len(bars), title="Downloaded")
+            results = self.results(scope=scope, size=len(bars))
+            self.console("Downloaded", results)
             yield bars
 
 

@@ -11,12 +11,13 @@ import pandas as pd
 from types import SimpleNamespace
 
 from finance.enumerations import Instrument, Position
-from finance.logging import Logging
+from finance.reporting import Results
 from finance.osi import OSI
 from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 from support.custom import ReversibleDict as RDict
+from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -84,7 +85,7 @@ class AlpacaAccountPage(WebJSONPage):
         return series
 
 
-class AlpacaPortfolioDownloader(WebStream, Logging, pages={"holdings": AlpacaHoldingsPage, "account": AlpacaAccountPage}):
+class AlpacaPortfolioDownloader(WebStream, Results, Logging, pages={"holdings": AlpacaHoldingsPage, "account": AlpacaAccountPage}):
     def __call__(self, /, **kwargs):
         holdings = self.page["holdings"](**kwargs)
         if holdings is None or bool(holdings.empty): holdings = pd.DataFrame(columns=portfolio_columns)
@@ -92,7 +93,8 @@ class AlpacaPortfolioDownloader(WebStream, Logging, pages={"holdings": AlpacaHol
         holdings = holdings.reset_index(drop=True, inplace=False)
         account = self.page["account"](**kwargs)
         scope = self.scope(holdings, instrument=Instrument.OPTION)
-        self.results(scope=scope, size=len(holdings.index), title="Downloaded")
+        results = self.results(scope=scope, size=len(holdings.index))
+        self.console("Downloaded", results)
         portfolio = SimpleNamespace(holdings=holdings, account=account)
         return portfolio
 

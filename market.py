@@ -15,11 +15,12 @@ from datetime import datetime as Datetime
 
 from finance.enumerations import Instrument, Option
 from finance.querys import Symbol, Contract
-from finance.logging import Logging
+from finance.reporting import Results
 from finance.osi import OSI
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
+from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -190,7 +191,7 @@ class AlpacaOptionPage(AlpacaSecurityPage):
         return dataframe
 
 
-class AlpacaMarketDownloader(WebStream, Logging, ABC):
+class AlpacaMarketDownloader(WebStream, Results, Logging, ABC):
     @abstractmethod
     def downloader(self, *args, **kwargs): pass
 
@@ -211,7 +212,8 @@ class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
             tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
             stocks = self.page(tickers=tickers, **kwargs)
             if stocks is None or bool(stocks.empty): continue
-            self.results(scope=scope, size=len(stocks), title="Downloaded")
+            results = self.results(scope=scope, size=len(stocks), title="Downloaded")
+            self.console("Downloaded", results)
             yield stocks
 
 
@@ -228,7 +230,8 @@ class AlpacaContractDownloader(AlpacaMarketDownloader, page=AlpacaContractPage):
             scope = self.scope([symbol], instrument=Instrument.STOCK)
             parameters = dict(ticker=symbol.ticker, expires=expires, strikes=strikes)
             contracts = self.page(**parameters, **kwargs)
-            self.results(scope=scope, size=len(contracts), title="Downloaded")
+            results = self.results(scope=scope, size=len(contracts))
+            self.console("Downloaded", results)
             for contract in contracts: yield contract
 
 
@@ -249,7 +252,8 @@ class AlpacaOptionDownloader(AlpacaMarketDownloader, page=AlpacaOptionPage):
             scope = self.scope(contracts, instrument=Instrument.OPTION)
             options = self.page(contracts=contracts, **kwargs)
             if options is None or bool(options.empty): continue
-            self.results(scope=scope, size=len(options), title="Downloaded")
+            results = self.results(scope=scope, size=len(options))
+            self.console("Downloaded", results)
             contracts = pd.DataFrame.from_records(options["osi"].map(OSI).map(asdict), index=options.index)
             options = pd.concat([options, contracts], axis=1)
             yield options

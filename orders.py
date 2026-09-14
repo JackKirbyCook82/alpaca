@@ -14,7 +14,7 @@ from datetime import date as Date
 from datetime import datetime as Datetime
 
 from finance.enumerations import Instrument, Option, Position, Status, Tenure, Terms, Intent, Action, Spread
-from finance.logging import Logging
+from finance.reporting import Results
 from finance.osi import OSI
 from webscraping.webpages import WebStream, WebJSONPage
 from webscraping.webpayloads import WebPayload
@@ -23,6 +23,7 @@ from webscraping.weburl import WebURL
 from support.custom import ReversibleDict as RDict
 from support.files import File, Header
 from support.custom import DateRange
+from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -149,7 +150,7 @@ class AlpacaOrderDownloadPage(AlpacaOrderPage):
         return orders
 
 
-class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderUploadPage):
+class AlpacaOrderUploader(WebStream, Results, Logging, page=AlpacaOrderUploadPage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__mutex = multiprocessing.Lock()
@@ -166,7 +167,8 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderUploadPage):
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
         scope = self.scope(orders, instrument=Instrument.OPTION)
-        self.results(scope=scope, size=len(orders.index), title="Uploaded")
+        results = self.results(scope=scope, size=len(orders.index))
+        self.console("Uploaded", results)
         return orders
 
     def filter(self, targets, /, **kwargs):
@@ -188,14 +190,15 @@ class AlpacaOrderUploader(WebStream, Logging, page=AlpacaOrderUploadPage):
     def mutex(self): return self.__mutex
 
 
-class AlpacaOrderDownloader(WebStream, Logging, page=AlpacaOrderDownloadPage):
+class AlpacaOrderDownloader(WebStream, Results, Logging, page=AlpacaOrderDownloadPage):
     def __call__(self, /, **kwargs):
         orders = self.page(**kwargs)
         if orders is None or bool(orders.empty): return pd.DataFrame(columns=order_columns)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
         scope = self.scope(orders, instruments=Instrument.OPTION)
-        self.results(scope=scope, size=len(orders.index), title="Downloaded")
+        results = self.results(scope=scope, size=len(orders.index))
+        self.console("Downloaded", results)
         return orders
 
 
