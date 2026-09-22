@@ -135,7 +135,7 @@ class AlpacaOrderPage(WebJSONPage):
 class AlpacaOrderUploadPage(AlpacaOrderPage):
     def __call__(self, *args, target, tenure, term, **kwargs):
         url = AlpacaOrderUploadURL(authenticator=self.authenticator)
-        securities = [{"osi": record.osi, "purpose": record.purpose, "action": record.action, "quantity": record.quantity} for record in target]
+        securities = [{"osi": record.osi, "purpose": record.purpose, "action": record.purpose.action, "quantity": record.quantity} for record in target]
         payload = AlpacaOrderUploadPayload({"price": target.price, "tenure": tenure, "term": term, "securities": securities})
         json = self.load(url, payload=payload)
         orders = self.orders(json, *args, **kwargs)

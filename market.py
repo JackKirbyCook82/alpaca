@@ -212,7 +212,7 @@ class AlpacaStockDownloader(AlpacaMarketDownloader, page=AlpacaStockPage):
             tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
             stocks = self.page(tickers=tickers, **kwargs)
             if stocks is None or bool(stocks.empty): continue
-            results = self.results(scope=scope, size=len(stocks), title="Downloaded")
+            results = self.results(scope=scope, size=len(stocks))
             self.console("Downloaded", results)
             yield stocks
 
