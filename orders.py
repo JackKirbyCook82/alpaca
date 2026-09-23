@@ -97,7 +97,7 @@ class AlpacaOrderUploadPayload(WebPayload.Mapping, mapping={"order_class": "mleg
     class Terms(WebPayload.Value, key="term", locator="type", parser=term_formatter): pass
     class Securities(WebPayload.Mapping, key="securities", locator="legs", multiple=True, optional=False):
         class Osi(WebPayload.Value, key="osi", locator="symbol"): pass
-        class Purpose(WebPayload.Value, key="purpose", locator="purpose", parser=purpose_formatter): pass
+        class Purpose(WebPayload.Value, key="purpose", locator="position_intent", parser=purpose_formatter): pass
         class Action(WebPayload.Value, key="action", locator="side", parser=action_formatter): pass
         class Quantity(WebPayload.Value, key="quantity", locator="ratio_qty", parser=quantity_formatter): pass
 
