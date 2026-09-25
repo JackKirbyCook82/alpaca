@@ -9,11 +9,12 @@ Created on Thurs Mar 26 2026
 
 import numpy as np
 import pandas as pd
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, asdict
 
-from finance.enumerations import Instrument
+from finance.enumerations import Instrument, Frequency
 from finance.reporting import Results
+from finance.osi import OSI
 from webscraping.webpages import WebJSONPage, WebStream
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
@@ -26,6 +27,8 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
+frequency_mapping = {Frequency.MINUTELY: "T", Frequency.HOURLY: "H", Frequency.DAILY: "D", Frequency.WEEKLY: "W", Frequency.MONTHLY: "M"}
+frequency_parser = lambda frequency: f"{int(frequency.duration)}{frequency_mapping[frequency.by]}"
 pagination_parser = lambda string: str(string) if string != "None" else None
 history_parser = lambda string: pd.to_datetime(string, utc=True).date()
 
@@ -36,25 +39,34 @@ class AlpacaHistoryURL(WebURL, headers={"accept": "application/json"}):
         return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 
-class AlpacaBarsURL(AlpacaHistoryURL, domain="https://data.alpaca.markets", path=["v2", "stocks", "bars"], parameters={"timeframe": "1Day", "feed": "sip", "limit": "10000"}):
-    @staticmethod
-    def parameters(*args, history, **kwargs): return {"start": history.minimum.strftime("%Y-%m-%d"), "end": history.maximum.strftime("%Y-%m-%d")}
-
+class AlpacaBarsURL(AlpacaHistoryURL, domain="https://data.alpaca.markets", path=["v2"], parameters={"limit": 10000}):
     @classmethod
     def parameters(cls, *args, **kwargs):
-        tickers = cls.tickers(*args, **kwargs)
+        products = cls.products(*args, **kwargs)
+        frequency = cls.frequency(*args, **kwargs)
         history = cls.history(*args, **kwargs)
         pagination = cls.pagination(*args, **kwargs)
-        return tickers | history | pagination
+        return products | frequency | history | pagination
 
     @staticmethod
-    def tickers(*args, tickers, **kwargs): return {"symbols": ",".join(list(tickers))}
+    def products(*args, products, **kwargs): raise NotImplementedError()
+    @staticmethod
+    def frequency(*args, frequency, **kwargs): return {"timeframe": frequency_parser(frequency)}
     @staticmethod
     def history(*args, history, **kwargs): return {"start": history.minimum.strftime("%Y-%m-%d"), "end": history.maximum.strftime("%Y-%m-%d")}
     @staticmethod
     def pagination(*args, pagination=None, **kwargs):
         if pagination is not None: return {"page_token": str(pagination)}
         else: return {}
+
+
+class AlpacaStockBarsURL(AlpacaBarsURL, path=["stocks", "bars"], parameters={"feed": "sip"}):
+    @staticmethod
+    def products(*args, products, **kwargs): return {"symbols": ",".join(list([symbol.ticker for symbol in products]))}
+
+class AlpacaOptionBarsURL(AlpacaBarsURL, path=["v1beta1", "options", "bars"]):
+    @staticmethod
+    def products(*args, products, **kwargs): return {"symbols": ",".join([str(OSI(product)) for product in products])}
 
 
 class AlpacaHistoryData(WebJSON, multiple=False, optional=False):
@@ -75,8 +87,8 @@ class AlpacaBarsPage(AlpacaHistoryPage):
         self.__fields = fields
         self.__parser = parser
 
-    def __call__(self, *args, tickers, history, **kwargs):
-        parameters = dict(tickers=tickers, history=history, authenticator=self.authenticator)
+    def __call__(self, *args, products, frequency, history, **kwargs):
+        parameters = dict(products=products, frequency=frequency, history=history, authenticator=self.authenticator)
         records = self.bars(**parameters)
         if not records: return None
         bars = pd.DataFrame.from_records(records)
@@ -85,7 +97,7 @@ class AlpacaBarsPage(AlpacaHistoryPage):
     def bars(self, *args, pagination=None, **kwargs):
         url = AlpacaBarsURL(*args, pagination=pagination, **kwargs)
         json = self.load(url)
-        records = [{"ticker": ticker} | self.parser(mapping) for ticker, contents in json["bars"].items() for mapping in contents]
+        records = [{"product": product} | self.parser(mapping) for product, contents in json["bars"].items() for mapping in contents]
         datas = AlpacaHistoryData(json, *args, **kwargs)
         pagination = datas["pagination"](*args, **kwargs)
         if not bool(pagination): return list(records)
@@ -99,30 +111,54 @@ class AlpacaBarsPage(AlpacaHistoryPage):
 
 class AlpacaHistoryDownloader(WebStream, Results, Logging, ABC):
     @abstractmethod
-    def downloader(self, *args, **kwargs): pass
+    def downloader(self, products, /, **kwargs): pass
+    @abstractmethod
+    def download(self, products, /, **kwargs): pass
 
 
-class AlpacaBarsDownloader(AlpacaHistoryDownloader, page=AlpacaBarsPage):
-    def __call__(self, symbols, /, **kwargs):
-        if not isinstance(symbols, list): symbols = [symbols]
-        bars = self.downloader(symbols, **kwargs)
-        bars = pd.concat(list(bars), axis=0)
-        bars["date"] = pd.to_datetime(bars["date"])
-        bars = bars.sort_values(by=["ticker", "date"], ascending=[True, False], inplace=False)
-        bars = bars.reset_index(drop=True, inplace=False)
+class AlpacaBarsDownloader(AlpacaHistoryDownloader, ABC, page=AlpacaBarsPage):
+    def __init_subclass__(cls, /, instrument, **kwargs): cls.__instrument__ = instrument
+    def __call__(self, products, /, **kwargs):
+        if not isinstance(products, list): products = [products]
+        bars = self.download(products, **kwargs)
         return bars
 
-    def downloader(self, symbols, /, **kwargs):
-        symbols = [symbols[index:index+self.capacity] for index in range(0, len(symbols), self.capacity)]
-        for symbols in symbols:
-            scope = self.scope(symbols, instrument=Instrument.STOCK)
-            tickers = [symbol.ticker for symbol in list(dict.fromkeys(symbols))]
-            bars = self.page(tickers=tickers, **kwargs)
+    def downloader(self, products, /, **kwargs):
+        products = [products[index:index + self.capacity] for index in range(0, len(products), self.capacity)]
+        for products in products:
+            scope = self.scope(products, instrument=type(self).instrument)
+            bars = self.page(products=products, **kwargs)
             if bars is None or bool(bars.empty): continue
             results = self.results(scope=scope, size=len(bars))
             self.console("Downloaded", results)
             yield bars
 
+    @property
+    def instrument(self): return type(self).__instrument__
+
+
+class AlpacaStockBarsDownloader(AlpacaBarsDownloader, instrument=Instrument.STOCK):
+    def download(self, products, /, **kwargs):
+        bars = self.downloader(products, **kwargs)
+        bars = pd.concat(list(bars), axis=0)
+        bars["date"] = pd.to_datetime(bars["date"])
+        bars = bars.sort_values(by=["product", "date"], ascending=[True, False], inplace=False)
+        bars = bars.rename(columns={"product": "ticker"})
+        bars = bars.reset_index(drop=True, inplace=False)
+        return bars
+
+
+class AlpacaOptionBarsDownloader(AlpacaBarsDownloader, instrument=Instrument.OPTION):
+    def download(self, products, /, **kwargs):
+        bars = self.downloader(products, **kwargs)
+        bars = pd.concat(list(bars), axis=0)
+        bars["date"] = pd.to_datetime(bars["date"])
+        bars = bars.sort_values(by=["product", "date"], ascending=[True, False], inplace=False)
+        bars = bars.rename(columns={"product": "osi"})
+        contracts = pd.DataFrame.from_records(bars["osi"].map(OSI).map(asdict), index=bars.index)
+        bars = pd.concat([bars, contracts], axis=1)
+        bars = bars.reset_index(drop=True, inplace=False)
+        return bars
 
 
 
