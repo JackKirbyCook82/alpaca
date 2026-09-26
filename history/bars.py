@@ -15,7 +15,7 @@ from dataclasses import dataclass, asdict
 from finance.enumerations import Instrument, Frequency
 from finance.reporting import Results
 from finance.osi import OSI
-from webscraping.webpages import WebJSONPage, WebStream
+from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 from support.mixins import Logging
@@ -126,7 +126,7 @@ class AlpacaOptionBarsHistoryPage(AlpacaBarsHistoryPage):
     def data(*args, **kwargs): return AlpacaBarsHistoryData(*args, **kwargs)
 
 
-class AlpacaBarsHistoryDownloader(WebStream, Results, Logging, ABC):
+class AlpacaBarsHistoryDownloader(Results, Logging, ABC):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         bars = self.downloader(products, **kwargs)
@@ -149,7 +149,11 @@ class AlpacaBarsHistoryDownloader(WebStream, Results, Logging, ABC):
     def parser(bars, /, **kwargs): pass
 
 
-class AlpacaStockBarsHistoryDownloader(AlpacaBarsHistoryDownloader, page=AlpacaStockBarsHistoryPage):
+class AlpacaStockBarsHistoryDownloader(AlpacaBarsHistoryDownloader):
+    def __init__(self, *args, **kwargs):
+        self.__page = AlpacaStockBarsHistoryPage(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+
     def scope(self, products, **kwargs):
         return super().scope(products, instrument=Instrument.STOCK)
 
@@ -161,8 +165,15 @@ class AlpacaStockBarsHistoryDownloader(AlpacaBarsHistoryDownloader, page=AlpacaS
         bars = bars.reset_index(drop=True, inplace=False)
         return bars
 
+    @property
+    def page(self): return self.__page
 
-class AlpacaOptionBarsHistoryDownloader(AlpacaBarsHistoryDownloader, page=AlpacaOptionBarsHistoryPage):
+
+class AlpacaOptionBarsHistoryDownloader(AlpacaBarsHistoryDownloader):
+    def __init__(self, *args, **kwargs):
+        self.__page = AlpacaOptionBarsHistoryPage(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+
     def scope(self, products, **kwargs):
         return super().scope(products, instrument=Instrument.OPTION)
 
@@ -175,6 +186,9 @@ class AlpacaOptionBarsHistoryDownloader(AlpacaBarsHistoryDownloader, page=Alpaca
         bars = pd.concat([bars, contracts], axis=1)
         bars = bars.reset_index(drop=True, inplace=False)
         return bars
+
+    @property
+    def page(self): return self.__page
 
 
 

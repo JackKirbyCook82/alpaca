@@ -8,16 +8,12 @@ Created on Sat Sept 26 2026
 """
 
 import numpy as np
-import pandas as pd
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, asdict
 from datetime import datetime as Datetime
 
 from finance.enumerations import Instrument, Option
-from finance.querys import Symbol, Contract
+from finance.querys import Contract
 from finance.reporting import Results
-from finance.osi import OSI
-from webscraping.webpages import WebJSONPage, WebStream
+from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 from support.mixins import Logging
@@ -76,7 +72,7 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
         class Strike(WebJSON.Text, key="strike", locator="//strike_price", parser=strike_parser): pass
 
 
-class AlpacaContractPage(WebJSONPage, ABC):
+class AlpacaContractPage(WebJSONPage):
     def __call__(self, *args, ticker, expires=None, strikes=None, **kwargs):
         parameters = dict(ticker=ticker, expires=expires, strikes=strikes, authenticator=self.authenticator)
         contracts = self.execute(**parameters)
@@ -92,7 +88,11 @@ class AlpacaContractPage(WebJSONPage, ABC):
         else: return list(records) + self.execute(*args, pagination=pagination, **kwargs)
 
 
-class AlpacaContractDownloader(WebStream, Results, Logging, ABC, page=AlpacaContractPage):
+class AlpacaContractDownloader(Results, Logging, page=AlpacaContractPage):
+    def __init__(self, *args, **kwargs):
+        self.__page = AlpacaContractPage(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         contracts = self.downloader(products, **kwargs)
@@ -107,3 +107,6 @@ class AlpacaContractDownloader(WebStream, Results, Logging, ABC, page=AlpacaCont
             results = self.results(scope=scope, size=len(contracts))
             self.console("Downloaded", results)
             for contract in contracts: yield contract
+
+    @property
+    def page(self): return self.__page

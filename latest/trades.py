@@ -15,7 +15,7 @@ from dataclasses import dataclass, asdict
 from finance.enumerations import Instrument
 from finance.reporting import Results
 from finance.osi import OSI
-from webscraping.webpages import WebJSONPage, WebStream
+from webscraping.webpages import WebJSONPage
 from webscraping.weburl import WebURL
 from support.mixins import Logging
 
@@ -93,7 +93,7 @@ class AlpacaOptionTradesLatestPage(AlpacaTradesLatestPage):
     def url(*args, **kwargs): return AlpacaOptionTradesLatestURL(*args, **kwargs)
 
 
-class AlpacaTradesLatestDownloader(WebStream, Results, Logging, ABC):
+class AlpacaTradesLatestDownloader(Results, Logging, ABC):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         bars = self.downloader(products, **kwargs)
@@ -116,7 +116,11 @@ class AlpacaTradesLatestDownloader(WebStream, Results, Logging, ABC):
     def parser(bars, /, **kwargs): pass
 
 
-class AlpacaStockTradesLatestDownloader(AlpacaTradesLatestDownloader, page=AlpacaStockTradesLatestPage):
+class AlpacaStockTradesLatestDownloader(AlpacaTradesLatestDownloader):
+    def __init__(self, *args, **kwargs):
+        self.__page = AlpacaStockTradesLatestPage(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+
     def scope(self, products, **kwargs):
         return super().scope(products, instrument=Instrument.STOCK)
 
@@ -128,8 +132,15 @@ class AlpacaStockTradesLatestDownloader(AlpacaTradesLatestDownloader, page=Alpac
         bars = bars.reset_index(drop=True, inplace=False)
         return bars
 
+    @property
+    def page(self): return self.__page
 
-class AlpacaOptionTradesLatestDownloader(AlpacaTradesLatestDownloader, page=AlpacaOptionTradesLatestPage):
+
+class AlpacaOptionTradesLatestDownloader(AlpacaTradesLatestDownloader):
+    def __init__(self, *args, **kwargs):
+        self.__page = AlpacaOptionTradesLatestPage(*args, **kwargs)
+        super().__init__(*args, **kwargs)
+
     def scope(self, products, **kwargs):
         return super().scope(products, instrument=Instrument.OPTION)
 
@@ -142,5 +153,8 @@ class AlpacaOptionTradesLatestDownloader(AlpacaTradesLatestDownloader, page=Alpa
         bars = pd.concat([bars, contracts], axis=1)
         bars = bars.reset_index(drop=True, inplace=False)
         return bars
+
+    @property
+    def page(self): return self.__page
 
 
