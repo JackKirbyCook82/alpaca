@@ -120,7 +120,7 @@ class AlpacaOrderData(WebJSON, multiple=False, optional=False):
 
 class AlpacaOrderPage(WebJSONPage):
     @staticmethod
-    def orders(json, *args, **kwargs):
+    def execute(json, *args, **kwargs):
         data = AlpacaOrderData(json, *args, **kwargs)
         mapping = data(*args, **kwargs)
         records = mapping.pop("securities")
@@ -138,7 +138,7 @@ class AlpacaOrderUploadPage(AlpacaOrderPage):
         securities = [{"osi": record.osi, "purpose": record.purpose, "action": record.purpose.action, "quantity": record.quantity} for record in target]
         payload = AlpacaOrderUploadPayload({"price": target.price, "tenure": tenure, "term": term, "securities": securities})
         json = self.load(url, payload=payload)
-        orders = self.orders(json, *args, **kwargs)
+        orders = self.execute(json, *args, **kwargs)
         return orders
 
 
@@ -146,7 +146,7 @@ class AlpacaOrderDownloadPage(AlpacaOrderPage):
     def __call__(self, *args, tickers, dates, **kwargs):
         url = AlpacaOrderDownloadURL(tickers=tickers, dates=dates, authenticator=self.authenticator)
         json = self.load(url, payload=None)
-        orders = self.orders(json, *args, **kwargs)
+        orders = self.execute(json, *args, **kwargs)
         return orders
 
 
