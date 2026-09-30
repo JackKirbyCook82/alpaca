@@ -30,18 +30,16 @@ options_columns = ["ticker", "expire", "option", "strike", "datatime", "trade", 
 stocks_columns = ["ticker", "datetime", "trade", "size"]
 
 
-class AlpacaTradesLatestURL(WebURL, domain="https://data.alpaca.markets", headers={"accept": "application/json"}):
-    @classmethod
-    def parameters(cls, *args, **kwargs):
-        products = cls.products(*args, **kwargs)
+class AlpacaTradesLatestURL(WebURL, ABC, domain="https://data.alpaca.markets", headers={"accept": "application/json"}):
+    def parameters(self, *args, **kwargs):
+        products = self.products(*args, **kwargs)
         return products
 
     @staticmethod
-    def products(*args, products, **kwargs): raise NotImplementedError()
-
+    @abstractmethod
+    def products(*args, products, **kwargs): pass
     @staticmethod
-    def headers(*args, authenticator, **kwargs):
-        return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
+    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 
 class AlpacaStockTradesLatestURL(AlpacaTradesLatestURL, path=["v2", "stocks", "trades", "latest"], parameters={"feed": "delayed_sip"}):

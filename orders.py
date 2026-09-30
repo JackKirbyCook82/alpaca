@@ -16,7 +16,7 @@ from datetime import datetime as Datetime
 from finance.enumerations import Instrument, Option, Position, Status, Tenure, Terms, Intent, Action, Spread
 from finance.reporting import Results
 from finance.osi import OSI
-from webscraping.webpages import WebStream, WebJSONPage
+from webscraping.webpages import WebJSONPage
 from webscraping.webpayloads import WebPayload
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
@@ -79,10 +79,9 @@ class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v
 
 class AlpacaOrderUploadURL(AlpacaOrderURL, headers={"accept": "application/json", "content-type": "application/json"}): pass
 class AlpacaOrderDownloadURL(AlpacaOrderURL, parameters={"limit": 500, "nested": "true", "status": "all"}, headers={"accept": "application/json"}):
-    @classmethod
-    def parameters(cls, *args, **kwargs):
-        tickers = cls.tickers(*args, **kwargs)
-        dates = cls.dates(*args, **kwargs)
+    def parameters(self, *args, **kwargs):
+        tickers = self.tickers(*args, **kwargs)
+        dates = self.dates(*args, **kwargs)
         return tickers | dates
 
     @staticmethod
@@ -150,19 +149,21 @@ class AlpacaOrderDownloadPage(AlpacaOrderPage):
         return orders
 
 
-class AlpacaOrderUploader(WebStream, Results, Logging, page=AlpacaOrderUploadPage):
+class AlpacaOrderUploader(Results, Logging, page=AlpacaOrderUploadPage):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.__page = AlpacaOrderUploadPage(*args, **kwargs)
         self.__mutex = multiprocessing.Lock()
+        self.__columns = order_columns
         self.__history = set()
 
     def __call__(self, targets, /, **kwargs):
         assert isinstance(targets, list)
-        if not bool(targets): return pd.DataFrame(columns=order_columns)
+        if not bool(targets): return pd.DataFrame(columns=self.columns)
         targets = list(self.filter(targets, **kwargs))
-        if not bool(targets): return pd.DataFrame(columns=order_columns)
+        if not bool(targets): return pd.DataFrame(columns=self.columns)
         orders = list(self.uploader(targets, **kwargs))
-        if not bool(orders): return pd.DataFrame(columns=order_columns)
+        if not bool(orders): return pd.DataFrame(columns=self.columns)
         orders = pd.concat(list(orders), axis=0)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
@@ -185,21 +186,35 @@ class AlpacaOrderUploader(WebStream, Results, Logging, page=AlpacaOrderUploadPag
             yield order
 
     @property
+    def columns(self): return self.__columns
+    @property
     def history(self): return self.__history
     @property
     def mutex(self): return self.__mutex
+    @property
+    def page(self): return self.__page
 
 
-class AlpacaOrderDownloader(WebStream, Results, Logging, page=AlpacaOrderDownloadPage):
+class AlpacaOrderDownloader(Results, Logging, page=AlpacaOrderDownloadPage):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__page = AlpacaOrderDownloadPage(*args, **kwargs)
+        self.__columns = order_columns
+
     def __call__(self, /, **kwargs):
         orders = self.page(**kwargs)
-        if orders is None or bool(orders.empty): return pd.DataFrame(columns=order_columns)
+        if orders is None or bool(orders.empty): return pd.DataFrame(columns=self.columns)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
         scope = self.scope(orders, instruments=Instrument.OPTION)
         results = self.results(scope=scope, size=len(orders.index))
         self.console("Downloaded", results)
         return orders
+
+    @property
+    def columns(self): return self.__columns
+    @property
+    def page(self): return self.__page
 
 
 

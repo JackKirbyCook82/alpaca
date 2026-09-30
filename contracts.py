@@ -31,16 +31,19 @@ strike_parser = lambda string: np.round(float(string), 2)
 
 
 class AlpacaContractURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "options", "contracts"], parameters={"show_deliverables": "false", "limit": "10000"}, headers={"accept": "application/json"}):
-    @classmethod
-    def parameters(cls, *args, **kwargs):
-        products = cls.products(*args, **kwargs)
-        expires = cls.expires(*args, **kwargs)
-        strikes = cls.strikes(*args, **kwargs)
-        pagination = cls.pagination(*args, **kwargs)
+    def parameters(self, *args, **kwargs):
+        products = self.products(*args, **kwargs)
+        expires = self.expires(*args, **kwargs)
+        strikes = self.strikes(*args, **kwargs)
+        pagination = self.pagination(*args, **kwargs)
         return products | expires | strikes | pagination
 
     @staticmethod
     def products(*args, product, **kwargs): return {"underlying_symbol": str(product)}
+    @staticmethod
+    def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if pagination is not None else {}
+    @staticmethod
+    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
     @staticmethod
     def expires(*args, expires=None, **kwargs):
@@ -51,15 +54,6 @@ class AlpacaContractURL(WebURL, domain="https://paper-api.alpaca.markets", path=
     def strikes(*args, strikes=None, **kwargs):
         if strikes is not None: return {"strike_price_gte": str(strikes.minimum), "strike_price_lte": str(strikes.maximum)}
         else: return {}
-
-    @staticmethod
-    def pagination(*args, pagination=None, **kwargs):
-        if pagination is not None: return {"page_token": str(pagination)}
-        else: return {}
-
-    @staticmethod
-    def headers(*args, authenticator, **kwargs):
-        return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 
 class AlpacaContractData(WebJSON, multiple=False, optional=False):

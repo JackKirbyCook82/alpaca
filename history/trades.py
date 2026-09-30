@@ -33,26 +33,22 @@ options_columns = ["ticker", "expire", "option", "strike", "datatime", "trade", 
 stocks_columns = ["ticker", "datetime", "trade", "size"]
 
 
-class AlpacaTradesHistoryURL(WebURL, domain="https://data.alpaca.markets", parameters={"limit": 10000}, headers={"accept": "application/json"}):
-    @classmethod
-    def parameters(cls, *args, **kwargs):
-        products = cls.products(*args, **kwargs)
-        history = cls.history(*args, **kwargs)
-        pagination = cls.pagination(*args, **kwargs)
+class AlpacaTradesHistoryURL(WebURL, ABC, domain="https://data.alpaca.markets", parameters={"limit": 10000}, headers={"accept": "application/json"}):
+    def parameters(self, *args, **kwargs):
+        products = self.products(*args, **kwargs)
+        history = self.history(*args, **kwargs)
+        pagination = self.pagination(*args, **kwargs)
         return products | history | pagination
 
     @staticmethod
-    def products(*args, products, **kwargs): raise NotImplementedError()
+    @abstractmethod
+    def products(*args, products, **kwargs): pass
     @staticmethod
     def history(*args, history, **kwargs): return {"start": history.minimum.strftime("%Y-%m-%d"), "end": history.maximum.strftime("%Y-%m-%d")}
     @staticmethod
-    def pagination(*args, pagination=None, **kwargs):
-        if pagination is not None: return {"page_token": str(pagination)}
-        else: return {}
-
+    def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if pagination is not None else {}
     @staticmethod
-    def headers(*args, authenticator, **kwargs):
-        return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
+    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 
 class AlpacaStockTradesHistoryURL(AlpacaTradesHistoryURL, path=["v2", "stocks", "trades"], parameters={"feed": "sip"}):

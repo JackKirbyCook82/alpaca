@@ -35,19 +35,24 @@ options_columns = ["ticker", "expire", "option", "strike", "datatime", "open", "
 stocks_columns = ["ticker", "datetime", "open", "close", "high", "low", "volume"]
 
 
-class AlpacaBarsHistoryURL(WebURL, domain="https://data.alpaca.markets", parameters={"limit": 10000}):
-    @classmethod
-    def parameters(cls, *args, **kwargs):
-        products = cls.products(*args, **kwargs)
-        history = cls.history(*args, **kwargs)
-        frequency = cls.frequency(*args, **kwargs)
-        pagination = cls.pagination(*args, **kwargs)
+class AlpacaBarsHistoryURL(WebURL, ABC, domain="https://data.alpaca.markets", parameters={"limit": 10000}):
+    def parameters(self, *args, **kwargs):
+        products = self.products(*args, **kwargs)
+        history = self.history(*args, **kwargs)
+        pagination = self.pagination(*args, **kwargs)
+        frequency = (self
+                     .frequency(*args, **kwargs))
         return products | frequency | history | pagination
 
     @staticmethod
-    def products(*args, products, **kwargs): raise NotImplementedError()
+    @abstractmethod
+    def products(*args, products, **kwargs): pass
     @staticmethod
     def history(*args, history, **kwargs): return {"start": history.minimum.strftime("%Y-%m-%d"), "end": history.maximum.strftime("%Y-%m-%d")}
+    @staticmethod
+    def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if pagination is not None else {}
+    @staticmethod
+    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
     @staticmethod
     def frequency(*args, frequency, **kwargs):
@@ -59,15 +64,6 @@ class AlpacaBarsHistoryURL(WebURL, domain="https://data.alpaca.markets", paramet
         if frequency.by == Frequency.MONTHLY: assert frequency.duration >= 1
         if frequency.by == Frequency.YEARLY: assert frequency.duration >= 1
         return {"timeframe": frequency_parser(frequency)}
-
-    @staticmethod
-    def pagination(*args, pagination=None, **kwargs):
-        if pagination is not None: return {"page_token": str(pagination)}
-        else: return {}
-
-    @staticmethod
-    def headers(*args, authenticator, **kwargs):
-        return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 
 class AlpacaStockBarsHistoryURL(AlpacaBarsHistoryURL, path=["v2", "stocks", "bars"], parameters={"feed": "sip"}):
