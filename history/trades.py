@@ -29,9 +29,11 @@ __license__ = "MIT License"
 
 pagination_parser = lambda string: str(string) if string != "None" else None
 history_parser = lambda string: pd.to_datetime(string, utc=True)
+options_columns = ["ticker", "expire", "option", "strike", "datatime", "trade", "size"]
+stocks_columns = ["ticker", "datetime", "trade", "size"]
 
 
-class AlpacaTradesHistoryURL(WebURL, domain="https://data.alpaca.markets", path=["v2"], parameters={"limit": 10000}, headers={"accept": "application/json"}):
+class AlpacaTradesHistoryURL(WebURL, domain="https://data.alpaca.markets", parameters={"limit": 10000}, headers={"accept": "application/json"}):
     @classmethod
     def parameters(cls, *args, **kwargs):
         products = cls.products(*args, **kwargs)
@@ -53,7 +55,7 @@ class AlpacaTradesHistoryURL(WebURL, domain="https://data.alpaca.markets", path=
         return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 
-class AlpacaStockTradesHistoryURL(AlpacaTradesHistoryURL, path=["stocks", "trades"], parameters={"feed": "sip"}):
+class AlpacaStockTradesHistoryURL(AlpacaTradesHistoryURL, path=["v2", "stocks", "trades"], parameters={"feed": "sip"}):
     @staticmethod
     def products(*args, products, **kwargs): return {"symbols": ",".join(list([symbol.ticker for symbol in products]))}
 
@@ -72,7 +74,7 @@ class AlpacaTradesHistoryData(WebJSON, multiple=False, optional=False):
 class AlpacaTradesHistoryPage(WebJSONPage, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        fields = [AlpacaField("datetime", "t", history_parser), AlpacaField("trade", "p", np.float32), AlpacaField("size", "s", np.float32)]
+        fields = [AlpacaField("datetime", "t", history_parser), AlpacaField("trade", "p", np.float32), AlpacaField("size", "s", np.int64)]
         parser = lambda mapping: {field.name: field.parser(mapping[field.code]) for field in self.fields if field.code in mapping.keys()}
         self.__fields = fields
         self.__parser = parser
@@ -119,69 +121,71 @@ class AlpacaOptionTradesHistoryPage(AlpacaTradesHistoryPage):
     def data(*args, **kwargs): return AlpacaTradesHistoryData(*args, **kwargs)
 
 
-class AlpacaTradesHistoryDownloader(Results, Logging, ABC, ABC):
+class AlpacaTradesHistoryDownloader(Results, Logging, ABC):
+    def __init_subclass__(cls, /, page, columns, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls.Columns = columns
+        cls.Page = page
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__page = type(self).Page(*args, **kwargs)
+        self.__columns = list(type(self).Columns)
+
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
-        bars = self.downloader(products, **kwargs)
-        bars = pd.concat(list(bars), axis=0)
-        bars = self.parser(bars, **kwargs)
-        return bars
+        trades = self.downloader(products, **kwargs)
+        if not trades: return pd.DataFrame(columns=self.columns)
+        trades = pd.concat(list(trades), axis=0)
+        trades = self.parser(trades, **kwargs)
+        return trades
 
     def downloader(self, products, /, **kwargs):
         products = [products[index:index + 100] for index in range(0, len(products), 100)]
         for products in products:
             scope = self.scope(products)
-            bars = self.page(products=products, **kwargs)
-            if bars is None or bool(bars.empty): continue
-            results = self.results(scope=scope, size=len(bars))
+            trades = self.page(products=products, **kwargs)
+            if trades is None or bool(trades.empty): continue
+            results = self.results(scope=scope, size=len(trades))
             self.console("Downloaded", results)
-            yield bars
+            yield trades
 
     @staticmethod
     @abstractmethod
-    def parser(bars, /, **kwargs): pass
+    def parser(trades, /, **kwargs): pass
+
+    @property
+    def columns(self): return self.__columns
+    @property
+    def page(self): return self.__page
 
 
-class AlpacaStockTradesHistoryDownloader(AlpacaTradesHistoryDownloader):
-    def __init__(self, *args, **kwargs):
-        self.__page = AlpacaStockTradesHistoryPage(*args, **kwargs)
-        super().__init__(*args, **kwargs)
-
+class AlpacaStockTradesHistoryDownloader(AlpacaTradesHistoryDownloader, page=AlpacaStockTradesHistoryPage, columns=stocks_columns):
     def scope(self, products, **kwargs):
         return super().scope(products, instrument=Instrument.STOCK)
 
     @staticmethod
-    def parser(bars, /, **kwargs):
-        bars["datetime"] = pd.to_datetime(bars["datetime"])
-        bars = bars.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
-        bars = bars.rename(columns={"product": "ticker"})
-        bars = bars.reset_index(drop=True, inplace=False)
-        return bars
-
-    @property
-    def page(self): return self.__page
+    def parser(trades, /, **kwargs):
+        trades["datetime"] = pd.to_datetime(trades["datetime"])
+        trades = trades.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
+        trades = trades.rename(columns={"product": "ticker"})
+        trades = trades.reset_index(drop=True, inplace=False)
+        return trades
 
 
-class AlpacaOptionTradesHistoryDownloader(AlpacaTradesHistoryDownloader):
-    def __init__(self, *args, **kwargs):
-        self.__page = AlpacaOptionTradesHistoryPage(*args, **kwargs)
-        super().__init__(*args, **kwargs)
-
+class AlpacaOptionTradesHistoryDownloader(AlpacaTradesHistoryDownloader, page=AlpacaOptionTradesHistoryPage, columns=options_columns):
     def scope(self, products, **kwargs):
         return super().scope(products, instrument=Instrument.OPTION)
 
     @staticmethod
-    def parser(bars, /, **kwargs):
-        bars["datetime"] = pd.to_datetime(bars["datetime"])
-        bars = bars.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
-        bars = bars.rename(columns={"product": "osi"})
-        contracts = pd.DataFrame.from_records(bars["osi"].map(OSI).map(asdict), index=bars.index)
-        bars = pd.concat([bars, contracts], axis=1)
-        bars = bars.reset_index(drop=True, inplace=False)
-        return bars
-
-    @property
-    def page(self): return self.__page
+    def parser(trades, /, **kwargs):
+        trades["datetime"] = pd.to_datetime(trades["datetime"])
+        trades = trades.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
+        trades = trades.rename(columns={"product": "osi"})
+        contracts = pd.DataFrame.from_records(trades["osi"].map(OSI).map(asdict), index=trades.index)
+        trades = pd.concat([trades, contracts], axis=1)
+        trades = trades.reset_index(drop=True, inplace=False)
+        return trades
 
 
 

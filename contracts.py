@@ -20,7 +20,7 @@ from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = []
+__all__ = ["AlpacaContractDownloader"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -40,8 +40,7 @@ class AlpacaContractURL(WebURL, domain="https://paper-api.alpaca.markets", path=
         return products | expires | strikes | pagination
 
     @staticmethod
-    def products(*args, products, **kwargs):
-        return {"symbols": ",".join(list([symbol.ticker for symbol in products]))}
+    def products(*args, product, **kwargs): return {"underlying_symbol": str(product)}
 
     @staticmethod
     def expires(*args, expires=None, **kwargs):
@@ -73,8 +72,10 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
 
 
 class AlpacaContractPage(WebJSONPage):
-    def __call__(self, *args, ticker, expires=None, strikes=None, **kwargs):
-        parameters = dict(ticker=ticker, expires=expires, strikes=strikes, authenticator=self.authenticator)
+    def __call__(self, *args, product, expires, strikes, **kwargs):
+        assert expires is not None and bool(expires)
+        assert strikes is not None and bool(strikes)
+        parameters = dict(product=product, expires=expires, strikes=strikes, authenticator=self.authenticator)
         contracts = self.execute(**parameters)
         return contracts
 
@@ -88,7 +89,7 @@ class AlpacaContractPage(WebJSONPage):
         else: return list(records) + self.execute(*args, pagination=pagination, **kwargs)
 
 
-class AlpacaContractDownloader(Results, Logging, page=AlpacaContractPage):
+class AlpacaContractDownloader(Results, Logging):
     def __init__(self, *args, **kwargs):
         self.__page = AlpacaContractPage(*args, **kwargs)
         super().__init__(*args, **kwargs)
@@ -103,7 +104,7 @@ class AlpacaContractDownloader(Results, Logging, page=AlpacaContractPage):
     def downloader(self, products, /, **kwargs):
         for product in products:
             scope = self.scope([product], instrument=Instrument.STOCK)
-            contracts = self.page(products=products, **kwargs)
+            contracts = self.page(product=product, **kwargs)
             results = self.results(scope=scope, size=len(contracts))
             self.console("Downloaded", results)
             for contract in contracts: yield contract

@@ -26,7 +26,11 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class AlpacaQuotesLatestURL(WebURL, domain="https://data.alpaca.markets", path=["v2"], headers={"accept": "application/json"}):
+options_columns = ["ticker", "expire", "option", "strike", "datatime", "bid", "ask", "supply", "demand"]
+stocks_columns = ["ticker", "datetime", "bid", "ask", "supply", "demand"]
+
+
+class AlpacaQuotesLatestURL(WebURL, domain="https://data.alpaca.markets", headers={"accept": "application/json"}):
     @classmethod
     def parameters(cls, *args, **kwargs):
         products = cls.products(*args, **kwargs)
@@ -40,7 +44,7 @@ class AlpacaQuotesLatestURL(WebURL, domain="https://data.alpaca.markets", path=[
         return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 
-class AlpacaStockQuotesLatestURL(AlpacaQuotesLatestURL, path=["stocks", "quotes", "latest"], parameters={"feed": "sip"}):
+class AlpacaStockQuotesLatestURL(AlpacaQuotesLatestURL, path=["v2", "stocks", "quotes", "latest"], parameters={"feed": "sip"}):
     @staticmethod
     def products(*args, products, **kwargs): return {"symbols": ",".join(list([symbol.ticker for symbol in products]))}
 
@@ -56,7 +60,7 @@ class AlpacaField: name: str; code: str; parser: callable
 class AlpacaQuotesLatestPage(WebJSONPage, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        fields = [AlpacaField("last", "p", np.float32), AlpacaField("bid", "bp", np.float32), AlpacaField("ask", "ap", np.float32)]
+        fields = [AlpacaField("bid", "bp", np.float32), AlpacaField("ask", "ap", np.float32)]
         fields = fields + [AlpacaField("supply", "as", np.float32), AlpacaField("demand", "bs", np.float32)]
         fields = fields + [AlpacaField("datetime", "t", lambda string: pd.to_datetime(string, utc=True))]
         parser = lambda mapping: {field.name: field.parser(mapping[field.code]) for field in self.fields if field.code in mapping.keys()}
@@ -73,7 +77,7 @@ class AlpacaQuotesLatestPage(WebJSONPage, ABC):
     def execute(self, *args, **kwargs):
         url = self.url(*args, **kwargs)
         json = self.load(url, *args, **kwargs)
-        records = [{"product": product} | self.parser(mapping) for product, contents in json["trades"].items() for mapping in contents]
+        records = [{"product": product} | self.parser(mapping) for product, mapping in json["quotes"].items()]
         return records
 
     @staticmethod
@@ -96,67 +100,70 @@ class AlpacaOptionQuotesLatestPage(AlpacaQuotesLatestPage):
 
 
 class AlpacaQuotesLatestDownloader(Results, Logging, ABC):
+    def __init_subclass__(cls, /, page, columns, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls.Columns = columns
+        cls.Page = page
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__page = type(self).Page(*args, **kwargs)
+        self.__columns = list(type(self).Columns)
+
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
-        bars = self.downloader(products, **kwargs)
-        bars = pd.concat(list(bars), axis=0)
-        bars = self.parser(bars, **kwargs)
-        return bars
+        quotes = self.downloader(products, **kwargs)
+        if not quotes: return pd.DataFrame(columns=self.columns)
+        quotes = pd.concat(list(quotes), axis=0)
+        quotes = self.parser(quotes, **kwargs)
+        return quotes
 
     def downloader(self, products, /, **kwargs):
         products = [products[index:index + 100] for index in range(0, len(products), 100)]
         for products in products:
             scope = self.scope(products)
-            bars = self.page(products=products, **kwargs)
-            if bars is None or bool(bars.empty): continue
-            results = self.results(scope=scope, size=len(bars))
+            quotes = self.page(products=products, **kwargs)
+            if quotes is None or bool(quotes.empty): continue
+            results = self.results(scope=scope, size=len(quotes))
             self.console("Downloaded", results)
-            yield bars
+            yield quotes
 
     @staticmethod
     @abstractmethod
-    def parser(bars, /, **kwargs): pass
+    def parser(quotes, /, **kwargs): pass
+
+    @property
+    def columns(self): return self.__columns
+    @property
+    def page(self): return self.__page
 
 
-class AlpacaStockQuotesLatestDownloader(AlpacaQuotesLatestDownloader):
-    def __init__(self, *args, **kwargs):
-        self.__page = AlpacaStockQuotesLatestPage(*args, **kwargs)
-        super().__init__(*args, **kwargs)
-
+class AlpacaStockQuotesLatestDownloader(AlpacaQuotesLatestDownloader, page=AlpacaOptionQuotesLatestPage, columns=stocks_columns):
     def scope(self, products, **kwargs):
         return super().scope(products, instrument=Instrument.STOCK)
 
     @staticmethod
-    def parser(bars, /, **kwargs):
-        bars["datetime"] = pd.to_datetime(bars["datetime"])
-        bars = bars.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
-        bars = bars.rename(columns={"product": "ticker"})
-        bars = bars.reset_index(drop=True, inplace=False)
-        return bars
-
-    @property
-    def page(self): return self.__page
+    def parser(quotes, /, **kwargs):
+        quotes["datetime"] = pd.to_datetime(quotes["datetime"])
+        quotes = quotes.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
+        quotes = quotes.rename(columns={"product": "ticker"})
+        quotes = quotes.reset_index(drop=True, inplace=False)
+        return quotes
 
 
-class AlpacaOptionQuotesLatestDownloader(AlpacaQuotesLatestDownloader):
-    def __init__(self, *args, **kwargs):
-        self.__page = AlpacaOptionQuotesLatestPage(*args, **kwargs)
-        super().__init__(*args, **kwargs)
-
+class AlpacaOptionQuotesLatestDownloader(AlpacaQuotesLatestDownloader, page=AlpacaOptionQuotesLatestPage, columns=stocks_columns):
     def scope(self, products, **kwargs):
         return super().scope(products, instrument=Instrument.OPTION)
 
     @staticmethod
-    def parser(bars, /, **kwargs):
-        bars["datetime"] = pd.to_datetime(bars["datetime"])
-        bars = bars.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
-        bars = bars.rename(columns={"product": "osi"})
-        contracts = pd.DataFrame.from_records(bars["osi"].map(OSI).map(asdict), index=bars.index)
-        bars = pd.concat([bars, contracts], axis=1)
-        bars = bars.reset_index(drop=True, inplace=False)
-        return bars
+    def parser(quotes, /, **kwargs):
+        quotes["datetime"] = pd.to_datetime(quotes["datetime"])
+        quotes = quotes.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
+        quotes = quotes.rename(columns={"product": "osi"})
+        contracts = pd.DataFrame.from_records(quotes["osi"].map(OSI).map(asdict), index=quotes.index)
+        quotes = pd.concat([quotes, contracts], axis=1)
+        quotes = quotes.reset_index(drop=True, inplace=False)
+        return quotes
 
-    @property
-    def page(self): return self.__page
 
 

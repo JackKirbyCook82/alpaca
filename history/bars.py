@@ -27,27 +27,38 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-frequency_mapping = {Frequency.MINUTELY: "T", Frequency.HOURLY: "H", Frequency.DAILY: "D", Frequency.WEEKLY: "W", Frequency.MONTHLY: "M"}
+frequency_mapping = {Frequency.MINUTELY: "T", Frequency.HOURLY: "H", Frequency.DAILY: "D", Frequency.WEEKLY: "W", Frequency.MONTHLY: "M", Frequency.YEARLY: "Y"}
 frequency_parser = lambda frequency: f"{int(frequency.duration)}{frequency_mapping[frequency.by]}"
 pagination_parser = lambda string: str(string) if string != "None" else None
 history_parser = lambda string: pd.to_datetime(string, utc=True)
+options_columns = ["ticker", "expire", "option", "strike", "datatime", "open", "close", "high", "low", "volume"]
+stocks_columns = ["ticker", "datetime", "open", "close", "high", "low", "volume"]
 
 
-class AlpacaBarsHistoryURL(WebURL, domain="https://data.alpaca.markets", path=["v2"], parameters={"limit": 10000}):
+class AlpacaBarsHistoryURL(WebURL, domain="https://data.alpaca.markets", parameters={"limit": 10000}):
     @classmethod
     def parameters(cls, *args, **kwargs):
         products = cls.products(*args, **kwargs)
-        frequency = cls.frequency(*args, **kwargs)
         history = cls.history(*args, **kwargs)
+        frequency = cls.frequency(*args, **kwargs)
         pagination = cls.pagination(*args, **kwargs)
         return products | frequency | history | pagination
 
     @staticmethod
     def products(*args, products, **kwargs): raise NotImplementedError()
     @staticmethod
-    def frequency(*args, frequency, **kwargs): return {"timeframe": frequency_parser(frequency)}
-    @staticmethod
     def history(*args, history, **kwargs): return {"start": history.minimum.strftime("%Y-%m-%d"), "end": history.maximum.strftime("%Y-%m-%d")}
+
+    @staticmethod
+    def frequency(*args, frequency, **kwargs):
+        assert isinstance(frequency.duration, int)
+        if frequency.by == Frequency.MINUTELY: assert 1 <= frequency.duration <= 59
+        if frequency.by == Frequency.HOURLY: assert 1 <= frequency.duration <= 23
+        if frequency.by == Frequency.DAILY: assert frequency.duration >= 1
+        if frequency.by == Frequency.WEEKLY: assert frequency.duration >= 1
+        if frequency.by == Frequency.MONTHLY: assert frequency.duration >= 1
+        if frequency.by == Frequency.YEARLY: assert frequency.duration >= 1
+        return {"timeframe": frequency_parser(frequency)}
 
     @staticmethod
     def pagination(*args, pagination=None, **kwargs):
@@ -59,7 +70,7 @@ class AlpacaBarsHistoryURL(WebURL, domain="https://data.alpaca.markets", path=["
         return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 
-class AlpacaStockBarsHistoryURL(AlpacaBarsHistoryURL, path=["stocks", "bars"], parameters={"feed": "sip"}):
+class AlpacaStockBarsHistoryURL(AlpacaBarsHistoryURL, path=["v2", "stocks", "bars"], parameters={"feed": "sip"}):
     @staticmethod
     def products(*args, products, **kwargs): return {"symbols": ",".join(list([symbol.ticker for symbol in products]))}
 
@@ -78,7 +89,7 @@ class AlpacaBarsHistoryData(WebJSON, multiple=False, optional=False):
 class AlpacaBarsHistoryPage(WebJSONPage, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        fields = [AlpacaField("open", "o", np.float32), AlpacaField("close", "c", np.float32), AlpacaField("high", "h", np.float32), AlpacaField("low", "l", np.float32), AlpacaField("adjusted", "vw", np.float32)]
+        fields = [AlpacaField("open", "o", np.float32), AlpacaField("close", "c", np.float32), AlpacaField("high", "h", np.float32), AlpacaField("low", "l", np.float32)]
         fields = fields + [AlpacaField("datetime", "t", history_parser), AlpacaField("volume", "v", np.int64)]
         parser = lambda mapping: {field.name: field.parser(mapping[field.code]) for field in self.fields if field.code in mapping.keys()}
         self.__fields = fields
@@ -127,9 +138,20 @@ class AlpacaOptionBarsHistoryPage(AlpacaBarsHistoryPage):
 
 
 class AlpacaBarsHistoryDownloader(Results, Logging, ABC):
+    def __init_subclass__(cls, /, page, columns, **kwargs):
+        super().__init_subclass__(**kwargs)
+        cls.Columns = columns
+        cls.Page = page
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.__page = type(self).Page(*args, **kwargs)
+        self.__columns = list(type(self).Columns)
+
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         bars = self.downloader(products, **kwargs)
+        if not bars: return pd.DataFrame(columns=self.columns)
         bars = pd.concat(list(bars), axis=0)
         bars = self.parser(bars, **kwargs)
         return bars
@@ -148,12 +170,13 @@ class AlpacaBarsHistoryDownloader(Results, Logging, ABC):
     @abstractmethod
     def parser(bars, /, **kwargs): pass
 
+    @property
+    def columns(self): return self.__columns
+    @property
+    def page(self): return self.__page
 
-class AlpacaStockBarsHistoryDownloader(AlpacaBarsHistoryDownloader):
-    def __init__(self, *args, **kwargs):
-        self.__page = AlpacaStockBarsHistoryPage(*args, **kwargs)
-        super().__init__(*args, **kwargs)
 
+class AlpacaStockBarsHistoryDownloader(AlpacaBarsHistoryDownloader, page=AlpacaStockBarsHistoryPage, columns=stocks_columns):
     def scope(self, products, **kwargs):
         return super().scope(products, instrument=Instrument.STOCK)
 
@@ -165,15 +188,8 @@ class AlpacaStockBarsHistoryDownloader(AlpacaBarsHistoryDownloader):
         bars = bars.reset_index(drop=True, inplace=False)
         return bars
 
-    @property
-    def page(self): return self.__page
 
-
-class AlpacaOptionBarsHistoryDownloader(AlpacaBarsHistoryDownloader):
-    def __init__(self, *args, **kwargs):
-        self.__page = AlpacaOptionBarsHistoryPage(*args, **kwargs)
-        super().__init__(*args, **kwargs)
-
+class AlpacaOptionBarsHistoryDownloader(AlpacaBarsHistoryDownloader, page=AlpacaOptionBarsHistoryPage, columns=options_columns):
     def scope(self, products, **kwargs):
         return super().scope(products, instrument=Instrument.OPTION)
 
@@ -187,8 +203,6 @@ class AlpacaOptionBarsHistoryDownloader(AlpacaBarsHistoryDownloader):
         bars = bars.reset_index(drop=True, inplace=False)
         return bars
 
-    @property
-    def page(self): return self.__page
 
 
 
