@@ -157,8 +157,7 @@ class AlpacaTradesHistoryDownloader(Results, Logging, ABC):
 
 
 class AlpacaStockTradesHistoryDownloader(AlpacaTradesHistoryDownloader, page=AlpacaStockTradesHistoryPage, columns=stocks_columns):
-    def scope(self, products, **kwargs):
-        return super().scope(products, instrument=Instrument.STOCK)
+    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.STOCK)
 
     @staticmethod
     def parser(trades, /, **kwargs):
@@ -170,8 +169,7 @@ class AlpacaStockTradesHistoryDownloader(AlpacaTradesHistoryDownloader, page=Alp
 
 
 class AlpacaOptionTradesHistoryDownloader(AlpacaTradesHistoryDownloader, page=AlpacaOptionTradesHistoryPage, columns=options_columns):
-    def scope(self, products, **kwargs):
-        return super().scope(products, instrument=Instrument.OPTION)
+    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.OPTION)
 
     @staticmethod
     def parser(trades, /, **kwargs):

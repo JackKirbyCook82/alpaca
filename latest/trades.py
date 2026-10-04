@@ -134,9 +134,8 @@ class AlpacaTradesLatestDownloader(Results, Logging, ABC):
     def page(self): return self.__page
 
 
-class AlpacaStockTradesLatestDownloader(AlpacaTradesLatestDownloader, page=AlpacaOptionTradesLatestPage, stocks=stocks_columns):
-    def scope(self, products, **kwargs):
-        return super().scope(products, instrument=Instrument.STOCK)
+class AlpacaStockTradesLatestDownloader(AlpacaTradesLatestDownloader, page=AlpacaStockTradesLatestPage, stocks=stocks_columns):
+    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.STOCK)
 
     @staticmethod
     def parser(trades, /, **kwargs):
@@ -148,8 +147,7 @@ class AlpacaStockTradesLatestDownloader(AlpacaTradesLatestDownloader, page=Alpac
 
 
 class AlpacaOptionTradesLatestDownloader(AlpacaTradesLatestDownloader, page=AlpacaOptionTradesLatestPage, columns=options_columns):
-    def scope(self, products, **kwargs):
-        return super().scope(products, instrument=Instrument.OPTION)
+    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.OPTION)
 
     @staticmethod
     def parser(trades, /, **kwargs):
@@ -158,7 +156,7 @@ class AlpacaOptionTradesLatestDownloader(AlpacaTradesLatestDownloader, page=Alpa
         trades = trades.rename(columns={"product": "osi"})
         contracts = pd.DataFrame.from_records(trades["osi"].map(OSI).map(asdict), index=trades.index)
         trades = pd.concat([trades, contracts], axis=1)
-        trades = bars.reset_index(drop=True, inplace=False)
+        trades = trades.reset_index(drop=True, inplace=False)
         return trades
 
 

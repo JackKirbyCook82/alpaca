@@ -136,9 +136,8 @@ class AlpacaQuotesLatestDownloader(Results, Logging, ABC):
     def page(self): return self.__page
 
 
-class AlpacaStockQuotesLatestDownloader(AlpacaQuotesLatestDownloader, page=AlpacaOptionQuotesLatestPage, columns=stocks_columns):
-    def scope(self, products, **kwargs):
-        return super().scope(products, instrument=Instrument.STOCK)
+class AlpacaStockQuotesLatestDownloader(AlpacaQuotesLatestDownloader, page=AlpacaStockQuotesLatestPage, columns=stocks_columns):
+    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.STOCK)
 
     @staticmethod
     def parser(quotes, /, **kwargs):
@@ -150,8 +149,7 @@ class AlpacaStockQuotesLatestDownloader(AlpacaQuotesLatestDownloader, page=Alpac
 
 
 class AlpacaOptionQuotesLatestDownloader(AlpacaQuotesLatestDownloader, page=AlpacaOptionQuotesLatestPage, columns=stocks_columns):
-    def scope(self, products, **kwargs):
-        return super().scope(products, instrument=Instrument.OPTION)
+    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.OPTION)
 
     @staticmethod
     def parser(quotes, /, **kwargs):
