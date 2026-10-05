@@ -65,8 +65,8 @@ class AlpacaQuotesLatestPage(WebJSONPage, ABC):
         self.__fields = fields
         self.__parser = parser
 
-    def __call__(self, *args, products, history, **kwargs):
-        parameters = dict(products=products, history=history, authenticator=self.authenticator)
+    def __call__(self, *args, products, **kwargs):
+        parameters = dict(products=products, authenticator=self.authenticator)
         records = self.execute(**parameters)
         if not records: return None
         bars = pd.DataFrame.from_records(records)
