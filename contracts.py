@@ -36,7 +36,7 @@ class AlpacaContractURL(AlpacaDownloadURL, domain="https://paper-api.alpaca.mark
         return products | expires | strikes | pagination
 
     @staticmethod
-    def products(*args, product, **kwargs): return {"underlying_symbol": str(product)}
+    def products(*args, product, **kwargs): return {"underlying_symbols": str(product)}
     @staticmethod
     def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if pagination is not None else {}
 

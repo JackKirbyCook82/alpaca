@@ -37,7 +37,7 @@ class AlpacaField: name: str; code: str; parser: callable
 
 
 class AlpacaPage(WebJSONPage):
-    def __init_subclass__(cls, /, url, data=None, **kwargs):
+    def __init_subclass__(cls, /, url=None, data=None, **kwargs):
         super().__init_subclass__(**kwargs)
         namespace = SimpleNamespace(url=url, data=data)
         cls.__namespace__ = namespace

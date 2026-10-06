@@ -26,7 +26,7 @@ __license__ = "MIT License"
 
 pagination_parser = lambda string: str(string) if string != "None" else None
 history_parser = lambda string: pd.to_datetime(string, utc=True)
-options_columns = ["ticker", "expire", "option", "strike", "datatime", "trade", "size"]
+options_columns = ["ticker", "expire", "option", "strike", "datetime", "trade", "size"]
 stocks_columns = ["ticker", "datetime", "trade", "size"]
 
 
@@ -96,7 +96,7 @@ class AlpacaOptionTradesHistoryPage(AlpacaTradesHistoryPage, url=AlpacaOptionTra
 class AlpacaTradesHistoryDownloader(AlpacaDownloader):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
-        trades = self.downloader(products, **kwargs)
+        trades = list(self.downloader(products, **kwargs))
         if not trades: return pd.DataFrame(columns=self.columns)
         trades = pd.concat(list(trades), axis=0)
         trades = self.parser(trades, **kwargs)

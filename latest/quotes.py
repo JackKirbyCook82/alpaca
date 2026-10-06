@@ -23,7 +23,7 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-options_columns = ["ticker", "expire", "option", "strike", "datatime", "bid", "ask", "supply", "demand"]
+options_columns = ["ticker", "expire", "option", "strike", "datetime", "bid", "ask", "supply", "demand"]
 stocks_columns = ["ticker", "datetime", "bid", "ask", "supply", "demand"]
 
 
@@ -82,7 +82,7 @@ class AlpacaOptionQuotesLatestPage(AlpacaQuotesLatestPage, url=AlpacaOptionQuote
 class AlpacaQuotesLatestDownloader(AlpacaDownloader):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
-        quotes = self.downloader(products, **kwargs)
+        quotes = list(self.downloader(products, **kwargs))
         if not quotes: return pd.DataFrame(columns=self.columns)
         quotes = pd.concat(list(quotes), axis=0)
         quotes = self.parser(quotes, **kwargs)

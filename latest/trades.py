@@ -23,7 +23,7 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-options_columns = ["ticker", "expire", "option", "strike", "datatime", "trade", "size"]
+options_columns = ["ticker", "expire", "option", "strike", "datetime", "trade", "size"]
 stocks_columns = ["ticker", "datetime", "trade", "size"]
 
 
@@ -54,8 +54,8 @@ class AlpacaTradesLatestPage(AlpacaDownloadPage, ABC):
         self.__fields = fields
         self.__parser = parser
 
-    def __call__(self, *args, products, history, **kwargs):
-        parameters = dict(products=products, history=history, authenticator=self.authenticator)
+    def __call__(self, *args, products, **kwargs):
+        parameters = dict(products=products)
         records = self.execute(**parameters)
         if not records: return None
         bars = pd.DataFrame.from_records(records)
@@ -80,7 +80,7 @@ class AlpacaOptionTradesLatestPage(AlpacaTradesLatestPage, url=AlpacaOptionTrade
 class AlpacaTradesLatestDownloader(AlpacaDownloader):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
-        trades = self.downloader(products, **kwargs)
+        trades = list(self.downloader(products, **kwargs))
         if not trades: return pd.DataFrame(columns=self.columns)
         trades = pd.concat(list(trades), axis=0)
         trades = self.parser(trades, **kwargs)

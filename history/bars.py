@@ -28,7 +28,7 @@ frequency_mapping = {Frequency.MINUTELY: "T", Frequency.HOURLY: "H", Frequency.D
 frequency_parser = lambda frequency: f"{int(frequency.duration)}{frequency_mapping[frequency.by]}"
 pagination_parser = lambda string: str(string) if string != "None" else None
 history_parser = lambda string: pd.to_datetime(string, utc=True)
-options_columns = ["ticker", "expire", "option", "strike", "datatime", "open", "close", "high", "low", "volume"]
+options_columns = ["ticker", "expire", "option", "strike", "datetime", "open", "close", "high", "low", "volume"]
 stocks_columns = ["ticker", "datetime", "open", "close", "high", "low", "volume"]
 
 
@@ -53,10 +53,10 @@ class AlpacaBarsHistoryURL(AlpacaDownloadURL, ABC, domain="https://data.alpaca.m
         assert isinstance(frequency.duration, int)
         if frequency.by == Frequency.MINUTELY: assert 1 <= frequency.duration <= 59
         if frequency.by == Frequency.HOURLY: assert 1 <= frequency.duration <= 23
-        if frequency.by == Frequency.DAILY: assert frequency.duration >= 1
-        if frequency.by == Frequency.WEEKLY: assert frequency.duration >= 1
-        if frequency.by == Frequency.MONTHLY: assert frequency.duration >= 1
-        if frequency.by == Frequency.YEARLY: assert frequency.duration >= 1
+        if frequency.by == Frequency.DAILY: assert frequency.duration == 1
+        if frequency.by == Frequency.WEEKLY: assert frequency.duration == 1
+        if frequency.by == Frequency.MONTHLY: assert 1 <= frequency.duration <= 12 and 12 % frequency.duration == 0
+        assert frequency.by != Frequency.YEARLY
         return {"timeframe": frequency_parser(frequency)}
 
 
@@ -111,7 +111,7 @@ class AlpacaOptionBarsHistoryPage(AlpacaBarsHistoryPage, url=AlpacaOptionBarsHis
 class AlpacaBarsHistoryDownloader(AlpacaDownloader):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
-        bars = self.downloader(products, **kwargs)
+        bars = list(self.downloader(products, **kwargs))
         if not bars: return pd.DataFrame(columns=self.columns)
         bars = pd.concat(list(bars), axis=0)
         bars = self.parser(bars, **kwargs)
