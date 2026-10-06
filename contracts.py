@@ -10,13 +10,10 @@ Created on Sat Sept 26 2026
 import numpy as np
 from datetime import datetime as Datetime
 
+from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader
 from finance.enumerations import Instrument, Option
 from finance.querys import Contract
-from finance.reporting import Results
-from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
-from webscraping.weburl import WebURL
-from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -30,7 +27,7 @@ expire_parser = lambda string: Datetime.strptime(string, "%Y-%m-%d").date()
 strike_parser = lambda string: np.round(float(string), 2)
 
 
-class AlpacaContractURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "options", "contracts"], parameters={"show_deliverables": "false", "limit": "10000"}, headers={"accept": "application/json"}):
+class AlpacaContractURL(AlpacaDownloadURL, domain="https://paper-api.alpaca.markets", path=["v2", "options", "contracts"], parameters={"show_deliverables": "false", "limit": "10000"}, headers={"accept": "application/json"}):
     def parameters(self, *args, **kwargs):
         products = self.products(*args, **kwargs)
         expires = self.expires(*args, **kwargs)
@@ -42,8 +39,6 @@ class AlpacaContractURL(WebURL, domain="https://paper-api.alpaca.markets", path=
     def products(*args, product, **kwargs): return {"underlying_symbol": str(product)}
     @staticmethod
     def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if pagination is not None else {}
-    @staticmethod
-    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
     @staticmethod
     def expires(*args, expires=None, **kwargs):
@@ -65,7 +60,7 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
         class Strike(WebJSON.Text, key="strike", locator="//strike_price", parser=strike_parser): pass
 
 
-class AlpacaContractPage(WebJSONPage):
+class AlpacaContractPage(AlpacaDownloadPage, url=AlpacaContractURL, data=AlpacaContractData):
     def __call__(self, *args, product, expires, strikes, **kwargs):
         assert expires is not None and bool(expires)
         assert strikes is not None and bool(strikes)
@@ -74,20 +69,16 @@ class AlpacaContractPage(WebJSONPage):
         return contracts
 
     def execute(self, *args, pagination=None, **kwargs):
-        url = AlpacaContractURL(*args, pagination=pagination, **kwargs)
-        json = self.load(url)
-        datas = AlpacaContractData(json, *args, **kwargs)
+        url = self.url(*args, pagination=pagination, **kwargs)
+        json = self.load(url, *args, **kwargs)
+        datas = self.data(json, *args, **kwargs)
         records = [data(*args, **kwargs) for data in datas["contracts"]]
         pagination = datas["pagination"](*args, **kwargs)
         if not bool(pagination): return list(records)
         else: return list(records) + self.execute(*args, pagination=pagination, **kwargs)
 
 
-class AlpacaContractDownloader(Results, Logging):
-    def __init__(self, *args, **kwargs):
-        self.__page = AlpacaContractPage(*args, **kwargs)
-        super().__init__(*args, **kwargs)
-
+class AlpacaContractDownloader(AlpacaDownloader, page=AlpacaContractPage, instrument=Instrument.STOCK):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         contracts = self.downloader(products, **kwargs)
@@ -97,11 +88,11 @@ class AlpacaContractDownloader(Results, Logging):
 
     def downloader(self, products, /, **kwargs):
         for product in products:
-            scope = self.scope([product], instrument=Instrument.STOCK)
+            scope = self.scope([product])
             contracts = self.page(product=product, **kwargs)
             results = self.results(scope=scope, size=len(contracts))
             self.console("Downloaded", results)
             for contract in contracts: yield contract
 
-    @property
-    def page(self): return self.__page
+
+

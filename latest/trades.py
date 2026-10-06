@@ -9,15 +9,12 @@ Created on Sat Sept 26 2026
 
 import numpy as np
 import pandas as pd
+from dataclasses import asdict
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, asdict
 
+from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaField
 from finance.enumerations import Instrument
-from finance.reporting import Results
 from finance.osi import OSI
-from webscraping.webpages import WebJSONPage
-from webscraping.weburl import WebURL
-from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -30,7 +27,7 @@ options_columns = ["ticker", "expire", "option", "strike", "datatime", "trade", 
 stocks_columns = ["ticker", "datetime", "trade", "size"]
 
 
-class AlpacaTradesLatestURL(WebURL, ABC, domain="https://data.alpaca.markets", headers={"accept": "application/json"}):
+class AlpacaTradesLatestURL(AlpacaDownloadURL, ABC, domain="https://data.alpaca.markets", headers={"accept": "application/json"}):
     def parameters(self, *args, **kwargs):
         products = self.products(*args, **kwargs)
         return products
@@ -38,8 +35,6 @@ class AlpacaTradesLatestURL(WebURL, ABC, domain="https://data.alpaca.markets", h
     @staticmethod
     @abstractmethod
     def products(*args, products, **kwargs): pass
-    @staticmethod
-    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 
 class AlpacaStockTradesLatestURL(AlpacaTradesLatestURL, path=["v2", "stocks", "trades", "latest"], parameters={"feed": "delayed_sip"}):
@@ -51,11 +46,7 @@ class AlpacaOptionTradesLatestURL(AlpacaTradesLatestURL, path=["v1beta1", "optio
     def products(*args, products, **kwargs): return {"symbols": ",".join([str(OSI(product)) for product in products])}
 
 
-@dataclass(frozen=True)
-class AlpacaField: name: str; code: str; parser: callable
-
-
-class AlpacaTradesLatestPage(WebJSONPage, ABC):
+class AlpacaTradesLatestPage(AlpacaDownloadPage, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         fields = [AlpacaField("datetime", "t", lambda string: pd.to_datetime(string, utc=True)), AlpacaField("trade", "p", np.float32), AlpacaField("size", "s", np.float32)]
@@ -76,36 +67,17 @@ class AlpacaTradesLatestPage(WebJSONPage, ABC):
         records = [{"product": product} | self.parser(mapping) for product, mapping in json["trades"].items()]
         return records
 
-    @staticmethod
-    @abstractmethod
-    def url(*args, **kwargs): pass
-
     @property
     def fields(self): return self.__fields
     @property
     def parser(self): return self.__parser
 
 
-class AlpacaStockTradesLatestPage(AlpacaTradesLatestPage):
-    @staticmethod
-    def url(*args, **kwargs): return AlpacaStockTradesLatestURL(*args, **kwargs)
-
-class AlpacaOptionTradesLatestPage(AlpacaTradesLatestPage):
-    @staticmethod
-    def url(*args, **kwargs): return AlpacaOptionTradesLatestURL(*args, **kwargs)
+class AlpacaStockTradesLatestPage(AlpacaTradesLatestPage, url=AlpacaStockTradesLatestURL): pass
+class AlpacaOptionTradesLatestPage(AlpacaTradesLatestPage, url=AlpacaOptionTradesLatestURL): pass
 
 
-class AlpacaTradesLatestDownloader(Results, Logging, ABC):
-    def __init_subclass__(cls, /, page, columns, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls.Columns = columns
-        cls.Page = page
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__page = type(self).Page(*args, **kwargs)
-        self.__columns = list(type(self).Columns)
-
+class AlpacaTradesLatestDownloader(AlpacaDownloader):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         trades = self.downloader(products, **kwargs)
@@ -128,15 +100,8 @@ class AlpacaTradesLatestDownloader(Results, Logging, ABC):
     @abstractmethod
     def parser(trades, /, **kwargs): pass
 
-    @property
-    def columns(self): return self.__columns
-    @property
-    def page(self): return self.__page
 
-
-class AlpacaStockTradesLatestDownloader(AlpacaTradesLatestDownloader, page=AlpacaStockTradesLatestPage, stocks=stocks_columns):
-    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.STOCK)
-
+class AlpacaStockTradesLatestDownloader(AlpacaTradesLatestDownloader, page=AlpacaStockTradesLatestPage, columns=stocks_columns, instrument=Instrument.STOCK):
     @staticmethod
     def parser(trades, /, **kwargs):
         trades["datetime"] = pd.to_datetime(trades["datetime"])
@@ -146,9 +111,7 @@ class AlpacaStockTradesLatestDownloader(AlpacaTradesLatestDownloader, page=Alpac
         return trades
 
 
-class AlpacaOptionTradesLatestDownloader(AlpacaTradesLatestDownloader, page=AlpacaOptionTradesLatestPage, columns=options_columns):
-    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.OPTION)
-
+class AlpacaOptionTradesLatestDownloader(AlpacaTradesLatestDownloader, page=AlpacaOptionTradesLatestPage, columns=options_columns, instrument=Instrument.OPTION):
     @staticmethod
     def parser(trades, /, **kwargs):
         trades["datetime"] = pd.to_datetime(trades["datetime"])

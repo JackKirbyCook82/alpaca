@@ -9,15 +9,12 @@ Created on Sat Sept 26 2026
 
 import numpy as np
 import pandas as pd
+from dataclasses import asdict
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, asdict
 
+from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaField
 from finance.enumerations import Instrument
-from finance.reporting import Results
 from finance.osi import OSI
-from webscraping.webpages import WebJSONPage
-from webscraping.weburl import WebURL
-from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -30,7 +27,7 @@ options_columns = ["ticker", "expire", "option", "strike", "datatime", "bid", "a
 stocks_columns = ["ticker", "datetime", "bid", "ask", "supply", "demand"]
 
 
-class AlpacaQuotesLatestURL(WebURL, ABC, domain="https://data.alpaca.markets", headers={"accept": "application/json"}):
+class AlpacaQuotesLatestURL(AlpacaDownloadURL, ABC, domain="https://data.alpaca.markets", headers={"accept": "application/json"}):
     def parameters(self, *args, **kwargs):
         products = self.products(*args, **kwargs)
         return products
@@ -38,8 +35,6 @@ class AlpacaQuotesLatestURL(WebURL, ABC, domain="https://data.alpaca.markets", h
     @staticmethod
     @abstractmethod
     def products(*args, products, **kwargs): pass
-    @staticmethod
-    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
 
 class AlpacaStockQuotesLatestURL(AlpacaQuotesLatestURL, path=["v2", "stocks", "quotes", "latest"], parameters={"feed": "sip"}):
@@ -51,11 +46,7 @@ class AlpacaOptionQuotesLatestURL(AlpacaQuotesLatestURL, path=["v1beta1", "optio
     def products(*args, products, **kwargs): return {"symbols": ",".join([str(OSI(product)) for product in products])}
 
 
-@dataclass(frozen=True)
-class AlpacaField: name: str; code: str; parser: callable
-
-
-class AlpacaQuotesLatestPage(WebJSONPage, ABC):
+class AlpacaQuotesLatestPage(AlpacaDownloadPage, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         fields = [AlpacaField("bid", "bp", np.float32), AlpacaField("ask", "ap", np.float32)]
@@ -66,7 +57,7 @@ class AlpacaQuotesLatestPage(WebJSONPage, ABC):
         self.__parser = parser
 
     def __call__(self, *args, products, **kwargs):
-        parameters = dict(products=products, authenticator=self.authenticator)
+        parameters = dict(products=products)
         records = self.execute(**parameters)
         if not records: return None
         bars = pd.DataFrame.from_records(records)
@@ -78,36 +69,17 @@ class AlpacaQuotesLatestPage(WebJSONPage, ABC):
         records = [{"product": product} | self.parser(mapping) for product, mapping in json["quotes"].items()]
         return records
 
-    @staticmethod
-    @abstractmethod
-    def url(*args, **kwargs): pass
-
     @property
     def fields(self): return self.__fields
     @property
     def parser(self): return self.__parser
 
 
-class AlpacaStockQuotesLatestPage(AlpacaQuotesLatestPage):
-    @staticmethod
-    def url(*args, **kwargs): return AlpacaStockQuotesLatestURL(*args, **kwargs)
-
-class AlpacaOptionQuotesLatestPage(AlpacaQuotesLatestPage):
-    @staticmethod
-    def url(*args, **kwargs): return AlpacaOptionQuotesLatestURL(*args, **kwargs)
+class AlpacaStockQuotesLatestPage(AlpacaQuotesLatestPage, url=AlpacaStockQuotesLatestURL): pass
+class AlpacaOptionQuotesLatestPage(AlpacaQuotesLatestPage, url=AlpacaOptionQuotesLatestURL): pass
 
 
-class AlpacaQuotesLatestDownloader(Results, Logging, ABC):
-    def __init_subclass__(cls, /, page, columns, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls.Columns = columns
-        cls.Page = page
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__page = type(self).Page(*args, **kwargs)
-        self.__columns = list(type(self).Columns)
-
+class AlpacaQuotesLatestDownloader(AlpacaDownloader):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         quotes = self.downloader(products, **kwargs)
@@ -130,15 +102,8 @@ class AlpacaQuotesLatestDownloader(Results, Logging, ABC):
     @abstractmethod
     def parser(quotes, /, **kwargs): pass
 
-    @property
-    def columns(self): return self.__columns
-    @property
-    def page(self): return self.__page
 
-
-class AlpacaStockQuotesLatestDownloader(AlpacaQuotesLatestDownloader, page=AlpacaStockQuotesLatestPage, columns=stocks_columns):
-    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.STOCK)
-
+class AlpacaStockQuotesLatestDownloader(AlpacaQuotesLatestDownloader, page=AlpacaStockQuotesLatestPage, columns=stocks_columns, instrument=Instrument.STOCK):
     @staticmethod
     def parser(quotes, /, **kwargs):
         quotes["datetime"] = pd.to_datetime(quotes["datetime"])
@@ -148,9 +113,7 @@ class AlpacaStockQuotesLatestDownloader(AlpacaQuotesLatestDownloader, page=Alpac
         return quotes
 
 
-class AlpacaOptionQuotesLatestDownloader(AlpacaQuotesLatestDownloader, page=AlpacaOptionQuotesLatestPage, columns=stocks_columns):
-    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.OPTION)
-
+class AlpacaOptionQuotesLatestDownloader(AlpacaQuotesLatestDownloader, page=AlpacaOptionQuotesLatestPage, columns=options_columns, instrument=Instrument.OPTION):
     @staticmethod
     def parser(quotes, /, **kwargs):
         quotes["datetime"] = pd.to_datetime(quotes["datetime"])

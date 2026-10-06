@@ -10,20 +10,20 @@ Created on Sat May 16 2026
 import math
 import multiprocessing
 import pandas as pd
+from abc import ABC, abstractmethod
 from datetime import date as Date
 from datetime import datetime as Datetime
 
+from alpaca.website import AlpacaDownloadURL, AlpacaUploadURL, AlpacaDownloadPage, AlpacaUploadPage, AlpacaDownloader
 from finance.enumerations import Instrument, Option, Position, Status, Tenure, Terms, Intent, Action, Spread
-from finance.reporting import Results
 from finance.osi import OSI
-from webscraping.webpages import WebJSONPage
 from webscraping.webpayloads import WebPayload
+from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from webscraping.weburl import WebURL
 from support.custom import ReversibleDict as RDict
 from support.files import File, Header
 from support.custom import DateRange
-from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -71,14 +71,9 @@ class AlpacaOrderFile(File, header=order_header):
         self.console(str(title), f"Orders[{str(tickers)}, {str(expires)}, {len(orders):.0f}]")
 
 
-class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "orders"]):
-    @staticmethod
-    def headers(*args, authenticator, **kwargs):
-        return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
-
-
-class AlpacaOrderUploadURL(AlpacaOrderURL, headers={"accept": "application/json", "content-type": "application/json"}): pass
-class AlpacaOrderDownloadURL(AlpacaOrderURL, parameters={"limit": 500, "nested": "true", "status": "all"}, headers={"accept": "application/json"}):
+class AlpacaOrderURL(WebURL, domain="https://paper-api.alpaca.markets", path=["v2", "orders"]): pass
+class AlpacaOrderUploadURL(AlpacaUploadURL, AlpacaOrderURL): pass
+class AlpacaOrderDownloadURL(AlpacaDownloadURL, AlpacaOrderURL, parameters={"limit": 500, "nested": "true", "status": "all"}):
     def parameters(self, *args, **kwargs):
         tickers = self.tickers(*args, **kwargs)
         dates = self.dates(*args, **kwargs)
@@ -117,10 +112,9 @@ class AlpacaOrderData(WebJSON, multiple=False, optional=False):
         class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=quantity_parser): pass
 
 
-class AlpacaOrderPage(WebJSONPage):
-    @staticmethod
-    def execute(json, *args, **kwargs):
-        data = AlpacaOrderData(json, *args, **kwargs)
+class AlpacaOrderPage(WebJSONPage, ABC):
+    def execute(self, json, *args, **kwargs):
+        data = self.data(json, *args, **kwargs)
         mapping = data(*args, **kwargs)
         records = mapping.pop("securities")
         records = [mapping | record for record in records]
@@ -130,31 +124,32 @@ class AlpacaOrderPage(WebJSONPage):
         orders["strike"] = pd.to_numeric(orders["strike"])
         return orders
 
+    @abstractmethod
+    def data(self, json, *args, **kwargs): pass
 
-class AlpacaOrderUploadPage(AlpacaOrderPage):
+
+class AlpacaOrderUploadPage(AlpacaUploadPage, AlpacaOrderPage, url=AlpacaOrderUploadURL, data=AlpacaOrderData):
     def __call__(self, *args, target, tenure, term, **kwargs):
-        url = AlpacaOrderUploadURL(authenticator=self.authenticator)
+        url = self.url(*args, **kwargs)
         securities = [{"osi": record.osi, "purpose": record.purpose, "action": record.purpose.action, "quantity": record.quantity} for record in target]
         payload = AlpacaOrderUploadPayload({"price": target.price, "tenure": tenure, "term": term, "securities": securities})
-        json = self.load(url, payload=payload)
+        json = self.load(url, *args, payload=payload, **kwargs)
         orders = self.execute(json, *args, **kwargs)
         return orders
 
 
-class AlpacaOrderDownloadPage(AlpacaOrderPage):
+class AlpacaOrderDownloadPage(AlpacaDownloadPage, AlpacaOrderPage, url=AlpacaOrderDownloadURL, data=AlpacaOrderData):
     def __call__(self, *args, tickers, dates, **kwargs):
-        url = AlpacaOrderDownloadURL(tickers=tickers, dates=dates, authenticator=self.authenticator)
-        json = self.load(url, payload=None)
+        url = self.url(*args, tickers=tickers, dates=dates, **kwargs)
+        json = self.load(url, *args, payload=None, **kwargs)
         orders = self.execute(json, *args, **kwargs)
         return orders
 
 
-class AlpacaOrderUploader(Results, Logging, page=AlpacaOrderUploadPage):
+class AlpacaOrderUploader(AlpacaDownloader, page=AlpacaOrderUploadPage, columns=order_columns, instrument=Instrument.OPTION):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__page = AlpacaOrderUploadPage(*args, **kwargs)
         self.__mutex = multiprocessing.Lock()
-        self.__columns = order_columns
         self.__history = set()
 
     def __call__(self, targets, /, **kwargs):
@@ -167,7 +162,7 @@ class AlpacaOrderUploader(Results, Logging, page=AlpacaOrderUploadPage):
         orders = pd.concat(list(orders), axis=0)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
-        scope = self.scope(orders, instrument=Instrument.OPTION)
+        scope = self.scope(orders)
         results = self.results(scope=scope, size=len(orders.index))
         self.console("Uploaded", results)
         return orders
@@ -186,35 +181,23 @@ class AlpacaOrderUploader(Results, Logging, page=AlpacaOrderUploadPage):
             yield order
 
     @property
-    def columns(self): return self.__columns
-    @property
     def history(self): return self.__history
     @property
     def mutex(self): return self.__mutex
-    @property
-    def page(self): return self.__page
 
 
-class AlpacaOrderDownloader(Results, Logging, page=AlpacaOrderDownloadPage):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__page = AlpacaOrderDownloadPage(*args, **kwargs)
-        self.__columns = order_columns
-
+class AlpacaOrderDownloader(AlpacaDownloader, page=AlpacaOrderDownloadPage, instrument=Instrument.OPTION):
     def __call__(self, /, **kwargs):
         orders = self.page(**kwargs)
         if orders is None or bool(orders.empty): return pd.DataFrame(columns=self.columns)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
-        scope = self.scope(orders, instruments=Instrument.OPTION)
+        scope = self.scope(orders)
         results = self.results(scope=scope, size=len(orders.index))
         self.console("Downloaded", results)
         return orders
 
-    @property
-    def columns(self): return self.__columns
-    @property
-    def page(self): return self.__page
+
 
 
 

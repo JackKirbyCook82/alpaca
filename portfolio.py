@@ -10,14 +10,11 @@ Created on Sun Jul 5 2026
 import pandas as pd
 from types import SimpleNamespace
 
+from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader
 from finance.enumerations import Instrument, Position
-from finance.reporting import Results
 from finance.osi import OSI
-from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
-from webscraping.weburl import WebURL
 from support.custom import ReversibleDict as RDict
-from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -37,11 +34,7 @@ quantity_parser = lambda string: abs(int(string))
 portfolio_columns = ["asset", "ticker", "expire", "option", "strike", "position", "quantity", "entry"]
 
 
-class AlpacaPortfolioURL(WebURL, domain="https://paper-api.alpaca.markets"):
-    @staticmethod
-    def headers(*args, authenticator, **kwargs):
-        return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
-
+class AlpacaPortfolioURL(AlpacaDownloadURL, domain="https://paper-api.alpaca.markets"): pass
 class AlpacaHoldingsURL(AlpacaPortfolioURL, path=["v2", "positions"], headers={"accept": "application/json"}): pass
 class AlpacaAccountURL(AlpacaPortfolioURL, path=["v2", "account"], headers={"accept": "application/json"}): pass
 
@@ -63,11 +56,11 @@ class AlpacaAccountData(WebJSON, multiple=False, optional=False):
     class Value(WebJSON.Text, key="value", locator="portfolio_value", parser=float): pass
 
 
-class AlpacaHoldingsPage(WebJSONPage):
+class AlpacaHoldingsPage(AlpacaDownloadPage, url=AlpacaHoldingsURL, data=AlpacaHoldingsData):
     def __call__(self, *args, **kwargs):
-        url = AlpacaHoldingsURL(authenticator=self.authenticator)
-        json = self.load(url)
-        datas = AlpacaHoldingsData(json, *args, **kwargs)
+        url = self.url(*args, **kwargs)
+        json = self.load(url, *args, **kwargs)
+        datas = self.data(json, *args, **kwargs)
         records = [data(*args, **kwargs) for data in datas]
         if not records: return None
         dataframe = pd.DataFrame.from_records(records)
@@ -75,40 +68,29 @@ class AlpacaHoldingsPage(WebJSONPage):
         dataframe["strike"] = pd.to_numeric(dataframe["strike"])
         return dataframe
 
-class AlpacaAccountPage(WebJSONPage):
+class AlpacaAccountPage(AlpacaDownloadPage, url=AlpacaAccountURL, data=AlpacaAccountData):
     def __call__(self, *args, **kwargs):
-        url = AlpacaAccountURL(authenticator=self.authenticator)
-        json = self.load(url)
-        datas = AlpacaAccountData(json, *args, **kwargs)
+        url = self.url(*args, **kwargs)
+        json = self.load(url, *args, **kwargs)
+        datas = self.data(json, *args, **kwargs)
         mapping = datas(*args, **kwargs)
         series = pd.Series(mapping)
         return series
 
 
-class AlpacaPortfolioDownloader(Results, Logging):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        holdings = AlpacaHoldingsPage(*args, **kwargs)
-        account = AlpacaAccountPage(*args, **kwargs)
-        self.__pages = {"holdings": holdings, "account": account}
-        self.__columns = portfolio_columns
-
+class AlpacaPortfolioDownloader(AlpacaDownloader, pages={"holdings": AlpacaHoldingsPage, "account": AlpacaAccountURL}, columns=portfolio_columns, instrument=Instrument.OPTION):
     def __call__(self, /, **kwargs):
         holdings = self.page["holdings"](**kwargs)
         if holdings is None or bool(holdings.empty): holdings = pd.DataFrame(columns=self.columns)
         holdings = holdings.sort_values(by=["asset"], inplace=False)
         holdings = holdings.reset_index(drop=True, inplace=False)
         account = self.pages["account"](**kwargs)
-        scope = self.scope(holdings, instrument=Instrument.OPTION)
+        scope = self.scope(holdings)
         results = self.results(scope=scope, size=len(holdings.index))
         self.console("Downloaded", results)
         portfolio = SimpleNamespace(holdings=holdings, account=account)
         return portfolio
 
-    @property
-    def columns(self): return self.__columns
-    @property
-    def pages(self): return self.__pages
 
 
 

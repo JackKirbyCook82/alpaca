@@ -9,16 +9,13 @@ Created on Thurs Mar 26 2026
 
 import numpy as np
 import pandas as pd
+from dataclasses import asdict
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, asdict
 
+from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaField
 from finance.enumerations import Instrument, Frequency
-from finance.reporting import Results
 from finance.osi import OSI
-from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
-from webscraping.weburl import WebURL
-from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -35,13 +32,12 @@ options_columns = ["ticker", "expire", "option", "strike", "datatime", "open", "
 stocks_columns = ["ticker", "datetime", "open", "close", "high", "low", "volume"]
 
 
-class AlpacaBarsHistoryURL(WebURL, ABC, domain="https://data.alpaca.markets", parameters={"limit": 10000}):
+class AlpacaBarsHistoryURL(AlpacaDownloadURL, ABC, domain="https://data.alpaca.markets", parameters={"limit": 10000}):
     def parameters(self, *args, **kwargs):
         products = self.products(*args, **kwargs)
         history = self.history(*args, **kwargs)
         pagination = self.pagination(*args, **kwargs)
-        frequency = (self
-                     .frequency(*args, **kwargs))
+        frequency = (self.frequency(*args, **kwargs))
         return products | frequency | history | pagination
 
     @staticmethod
@@ -51,8 +47,6 @@ class AlpacaBarsHistoryURL(WebURL, ABC, domain="https://data.alpaca.markets", pa
     def history(*args, history, **kwargs): return {"start": history.minimum.strftime("%Y-%m-%d"), "end": history.maximum.strftime("%Y-%m-%d")}
     @staticmethod
     def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if pagination is not None else {}
-    @staticmethod
-    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
 
     @staticmethod
     def frequency(*args, frequency, **kwargs):
@@ -75,14 +69,11 @@ class AlpacaOptionBarsHistoryURL(AlpacaBarsHistoryURL, path=["v1beta1", "options
     def products(*args, products, **kwargs): return {"symbols": ",".join([str(OSI(product)) for product in products])}
 
 
-@dataclass(frozen=True)
-class AlpacaField: name: str; code: str; parser: callable
-
 class AlpacaBarsHistoryData(WebJSON, multiple=False, optional=False):
     class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=pagination_parser, optional=True): pass
 
 
-class AlpacaBarsHistoryPage(WebJSONPage, ABC):
+class AlpacaBarsHistoryPage(AlpacaDownloadPage, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         fields = [AlpacaField("open", "o", np.float32), AlpacaField("close", "c", np.float32), AlpacaField("high", "h", np.float32), AlpacaField("low", "l", np.float32)]
@@ -92,7 +83,7 @@ class AlpacaBarsHistoryPage(WebJSONPage, ABC):
         self.__parser = parser
 
     def __call__(self, *args, products, frequency, history, **kwargs):
-        parameters = dict(products=products, frequency=frequency, history=history, authenticator=self.authenticator)
+        parameters = dict(products=products, frequency=frequency, history=history)
         records = self.execute(**parameters)
         if not records: return None
         bars = pd.DataFrame.from_records(records)
@@ -107,43 +98,17 @@ class AlpacaBarsHistoryPage(WebJSONPage, ABC):
         if not bool(pagination): return list(records)
         else: return list(records) + self.execute(*args, pagination=pagination, **kwargs)
 
-    @staticmethod
-    @abstractmethod
-    def url(*args, **kwargs): pass
-    @staticmethod
-    @abstractmethod
-    def data(json, *args, **kwargs): pass
-
     @property
     def fields(self): return self.__fields
     @property
     def parser(self): return self.__parser
 
 
-class AlpacaStockBarsHistoryPage(AlpacaBarsHistoryPage):
-    @staticmethod
-    def url(*args, **kwargs): return AlpacaStockBarsHistoryURL(*args, **kwargs)
-    @staticmethod
-    def data(*args, **kwargs): return AlpacaBarsHistoryData(*args, **kwargs)
-
-class AlpacaOptionBarsHistoryPage(AlpacaBarsHistoryPage):
-    @staticmethod
-    def url(*args, **kwargs): return AlpacaOptionBarsHistoryURL(*args, **kwargs)
-    @staticmethod
-    def data(*args, **kwargs): return AlpacaBarsHistoryData(*args, **kwargs)
+class AlpacaStockBarsHistoryPage(AlpacaBarsHistoryPage, url=AlpacaStockBarsHistoryURL, data=AlpacaBarsHistoryData): pass
+class AlpacaOptionBarsHistoryPage(AlpacaBarsHistoryPage, url=AlpacaOptionBarsHistoryURL, data=AlpacaBarsHistoryData): pass
 
 
-class AlpacaBarsHistoryDownloader(Results, Logging, ABC):
-    def __init_subclass__(cls, /, page, columns, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls.Columns = columns
-        cls.Page = page
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.__page = type(self).Page(*args, **kwargs)
-        self.__columns = list(type(self).Columns)
-
+class AlpacaBarsHistoryDownloader(AlpacaDownloader):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         bars = self.downloader(products, **kwargs)
@@ -166,15 +131,8 @@ class AlpacaBarsHistoryDownloader(Results, Logging, ABC):
     @abstractmethod
     def parser(bars, /, **kwargs): pass
 
-    @property
-    def columns(self): return self.__columns
-    @property
-    def page(self): return self.__page
 
-
-class AlpacaStockBarsHistoryDownloader(AlpacaBarsHistoryDownloader, page=AlpacaStockBarsHistoryPage, columns=stocks_columns):
-    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.STOCK)
-
+class AlpacaStockBarsHistoryDownloader(AlpacaBarsHistoryDownloader, page=AlpacaStockBarsHistoryPage, columns=stocks_columns, instrument=Instrument.STOCK):
     @staticmethod
     def parser(bars, /, **kwargs):
         bars["datetime"] = pd.to_datetime(bars["datetime"])
@@ -184,9 +142,7 @@ class AlpacaStockBarsHistoryDownloader(AlpacaBarsHistoryDownloader, page=AlpacaS
         return bars
 
 
-class AlpacaOptionBarsHistoryDownloader(AlpacaBarsHistoryDownloader, page=AlpacaOptionBarsHistoryPage, columns=options_columns):
-    def scope(self, products, **kwargs): return super().scope(products, instrument=Instrument.OPTION)
-
+class AlpacaOptionBarsHistoryDownloader(AlpacaBarsHistoryDownloader, page=AlpacaOptionBarsHistoryPage, columns=options_columns, instrument=Instrument.OPTION):
     @staticmethod
     def parser(bars, /, **kwargs):
         bars["datetime"] = pd.to_datetime(bars["datetime"])
