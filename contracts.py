@@ -64,7 +64,7 @@ class AlpacaContractPage(AlpacaDownloadPage, url=AlpacaContractURL, data=AlpacaC
     def __call__(self, *args, product, expires, strikes, **kwargs):
         assert expires is not None and bool(expires)
         assert strikes is not None and bool(strikes)
-        parameters = dict(product=product, expires=expires, strikes=strikes, authenticator=self.authenticator)
+        parameters = dict(product=product, expires=expires, strikes=strikes)
         contracts = self.execute(**parameters)
         return contracts
 
