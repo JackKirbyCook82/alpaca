@@ -13,7 +13,7 @@ from dataclasses import asdict
 from abc import ABC, abstractmethod
 
 from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaField
-from finance.enumerations import Instrument, Frequency
+from finance.enumerations import Instrument
 from finance.osi import OSI
 from webscraping.webdatas import WebJSON
 
@@ -24,8 +24,6 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-frequency_mapping = {Frequency.MINUTELY: "T", Frequency.HOURLY: "H", Frequency.DAILY: "D", Frequency.WEEKLY: "W", Frequency.MONTHLY: "M", Frequency.YEARLY: "Y"}
-frequency_parser = lambda frequency: f"{int(frequency.duration)}{frequency_mapping[frequency.by]}"
 pagination_parser = lambda string: str(string) if string != "None" else None
 history_parser = lambda string: pd.to_datetime(string, utc=True)
 options_columns = ["ticker", "expire", "option", "strike", "datetime", "open", "close", "high", "low", "volume"]
@@ -43,21 +41,6 @@ class AlpacaBarsHistoryURL(AlpacaDownloadURL, ABC, domain="https://data.alpaca.m
     @staticmethod
     @abstractmethod
     def products(*args, products, **kwargs): pass
-    @staticmethod
-    def history(*args, history, **kwargs): return {"start": history.minimum.strftime("%Y-%m-%d"), "end": history.maximum.strftime("%Y-%m-%d")}
-    @staticmethod
-    def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if pagination is not None else {}
-
-    @staticmethod
-    def frequency(*args, frequency, **kwargs):
-        assert isinstance(frequency.duration, int)
-        if frequency.by == Frequency.MINUTELY: assert 1 <= frequency.duration <= 59
-        if frequency.by == Frequency.HOURLY: assert 1 <= frequency.duration <= 23
-        if frequency.by == Frequency.DAILY: assert frequency.duration == 1
-        if frequency.by == Frequency.WEEKLY: assert frequency.duration == 1
-        if frequency.by == Frequency.MONTHLY: assert 1 <= frequency.duration <= 12 and 12 % frequency.duration == 0
-        assert frequency.by != Frequency.YEARLY
-        return {"timeframe": frequency_parser(frequency)}
 
 
 class AlpacaStockBarsHistoryURL(AlpacaBarsHistoryURL, path=["v2", "stocks", "bars"], parameters={"feed": "sip"}):

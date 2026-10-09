@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Sept 26 2026
-@name:   Alpaca History Trades Objects
+@name:   Alpaca Latest Ticks Objects
 @author: Jack Kirby Cook
-@file:   alpaca/history/trades.py
+@file:   alpaca/latest/trades.py
 
 """
 
@@ -15,73 +15,57 @@ from abc import ABC, abstractmethod
 from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaField
 from finance.enumerations import Instrument
 from finance.osi import OSI
-from webscraping.webdatas import WebJSON
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["AlpacaStockTradesHistoryDownloader", "AlpacaOptionTradesHistoryDownloader"]
+__all__ = ["AlpacaStockTicksLatestDownloader", "AlpacaOptionTicksLatestDownloader"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-pagination_parser = lambda string: str(string) if string != "None" else None
-history_parser = lambda string: pd.to_datetime(string, utc=True)
 options_columns = ["ticker", "expire", "option", "strike", "datetime", "trade", "size"]
 stocks_columns = ["ticker", "datetime", "trade", "size"]
 
 
-class AlpacaTradesHistoryURL(AlpacaDownloadURL, ABC, domain="https://data.alpaca.markets", parameters={"limit": 10000}, headers={"accept": "application/json"}):
+class AlpacaTicksLatestURL(AlpacaDownloadURL, ABC, domain="https://data.alpaca.markets", headers={"accept": "application/json"}):
     def parameters(self, *args, **kwargs):
         products = self.products(*args, **kwargs)
-        history = self.history(*args, **kwargs)
-        pagination = self.pagination(*args, **kwargs)
-        return products | history | pagination
+        return products
 
     @staticmethod
     @abstractmethod
     def products(*args, products, **kwargs): pass
-    @staticmethod
-    def history(*args, history, **kwargs): return {"start": history.minimum.strftime("%Y-%m-%d"), "end": history.maximum.strftime("%Y-%m-%d")}
-    @staticmethod
-    def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if pagination is not None else {}
 
 
-class AlpacaStockTradesHistoryURL(AlpacaTradesHistoryURL, path=["v2", "stocks", "trades"], parameters={"feed": "sip"}):
+class AlpacaStockTicksLatestURL(AlpacaTicksLatestURL, path=["v2", "stocks", "trades", "latest"], parameters={"feed": "delayed_sip"}):
     @staticmethod
     def products(*args, products, **kwargs): return {"symbols": ",".join(list([symbol.ticker for symbol in products]))}
 
-class AlpacaOptionTradesHistoryURL(AlpacaTradesHistoryURL, path=["v1beta1", "options", "trades"]):
+class AlpacaOptionTicksLatestURL(AlpacaTicksLatestURL, path=["v1beta1", "options", "trades", "latest"], parameters={"feed": "indicative"}):
     @staticmethod
     def products(*args, products, **kwargs): return {"symbols": ",".join([str(OSI(product)) for product in products])}
 
 
-class AlpacaTradesHistoryData(WebJSON, multiple=False, optional=False):
-    class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=pagination_parser, optional=True): pass
-
-
-class AlpacaTradesHistoryPage(AlpacaDownloadPage, ABC):
+class AlpacaTicksLatestPage(AlpacaDownloadPage, ABC):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        fields = [AlpacaField("datetime", "t", history_parser), AlpacaField("trade", "p", np.float32), AlpacaField("size", "s", np.int64)]
+        fields = [AlpacaField("datetime", "t", lambda string: pd.to_datetime(string, utc=True)), AlpacaField("trade", "p", np.float32), AlpacaField("size", "s", np.float32)]
         parser = lambda mapping: {field.name: field.parser(mapping[field.code]) for field in self.fields if field.code in mapping.keys()}
         self.__fields = fields
         self.__parser = parser
 
-    def __call__(self, *args, products, history, **kwargs):
-        parameters = dict(products=products, history=history)
+    def __call__(self, *args, products, **kwargs):
+        parameters = dict(products=products)
         records = self.execute(**parameters)
         if not records: return None
         bars = pd.DataFrame.from_records(records)
         return bars
 
-    def execute(self, *args, pagination=None, **kwargs):
-        url = self.url(*args, pagination=pagination, **kwargs)
+    def execute(self, *args, **kwargs):
+        url = self.url(*args, **kwargs)
         json = self.load(url, *args, **kwargs)
-        records = [{"product": product} | self.parser(mapping) for product, contents in json["trades"].items() for mapping in contents]
-        data = self.data(json, *args, **kwargs)
-        pagination = data["pagination"](*args, **kwargs)
-        if not bool(pagination): return list(records)
-        else: return list(records) + self.execute(*args, pagination=pagination, **kwargs)
+        records = [{"product": product} | self.parser(mapping) for product, mapping in json["trades"].items()]
+        return records
 
     @property
     def fields(self): return self.__fields
@@ -89,11 +73,11 @@ class AlpacaTradesHistoryPage(AlpacaDownloadPage, ABC):
     def parser(self): return self.__parser
 
 
-class AlpacaStockTradesHistoryPage(AlpacaTradesHistoryPage, url=AlpacaStockTradesHistoryURL, data=AlpacaTradesHistoryData): pass
-class AlpacaOptionTradesHistoryPage(AlpacaTradesHistoryPage, url=AlpacaOptionTradesHistoryURL, data=AlpacaTradesHistoryData): pass
+class AlpacaStockTicksLatestPage(AlpacaTicksLatestPage, url=AlpacaStockTicksLatestURL): pass
+class AlpacaOptionTicksLatestPage(AlpacaTicksLatestPage, url=AlpacaOptionTicksLatestURL): pass
 
 
-class AlpacaTradesHistoryDownloader(AlpacaDownloader):
+class AlpacaTicksLatestDownloader(AlpacaDownloader):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         trades = list(self.downloader(products, **kwargs))
@@ -117,7 +101,7 @@ class AlpacaTradesHistoryDownloader(AlpacaDownloader):
     def parser(trades, /, **kwargs): pass
 
 
-class AlpacaStockTradesHistoryDownloader(AlpacaTradesHistoryDownloader, page=AlpacaStockTradesHistoryPage, columns=stocks_columns, instrument=Instrument.STOCK):
+class AlpacaStockTicksLatestDownloader(AlpacaTicksLatestDownloader, page=AlpacaStockTicksLatestPage, columns=stocks_columns, instrument=Instrument.STOCK):
     @staticmethod
     def parser(trades, /, **kwargs):
         trades["datetime"] = pd.to_datetime(trades["datetime"])
@@ -127,7 +111,7 @@ class AlpacaStockTradesHistoryDownloader(AlpacaTradesHistoryDownloader, page=Alp
         return trades
 
 
-class AlpacaOptionTradesHistoryDownloader(AlpacaTradesHistoryDownloader, page=AlpacaOptionTradesHistoryPage, columns=options_columns, instrument=Instrument.OPTION):
+class AlpacaOptionTicksLatestDownloader(AlpacaTicksLatestDownloader, page=AlpacaOptionTicksLatestPage, columns=options_columns, instrument=Instrument.OPTION):
     @staticmethod
     def parser(trades, /, **kwargs):
         trades["datetime"] = pd.to_datetime(trades["datetime"])
