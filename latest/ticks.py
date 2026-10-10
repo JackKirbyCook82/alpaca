@@ -7,12 +7,11 @@ Created on Sat Sept 26 2026
 
 """
 
-import numpy as np
 import pandas as pd
 from dataclasses import asdict
 from abc import ABC, abstractmethod
 
-from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaField
+from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader
 from finance.enumerations import Instrument
 from finance.osi import OSI
 
@@ -46,14 +45,7 @@ class AlpacaOptionTicksLatestURL(AlpacaTicksLatestURL, path=["v1beta1", "options
     def products(*args, products, **kwargs): return {"symbols": ",".join([str(OSI(product)) for product in products])}
 
 
-class AlpacaTicksLatestPage(AlpacaDownloadPage, ABC):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        fields = [AlpacaField("datetime", "t", lambda string: pd.to_datetime(string, utc=True)), AlpacaField("trade", "p", np.float32), AlpacaField("size", "s", np.float32)]
-        parser = lambda mapping: {field.name: field.parser(mapping[field.code]) for field in self.fields if field.code in mapping.keys()}
-        self.__fields = fields
-        self.__parser = parser
-
+class AlpacaTicksLatestPage(AlpacaDownloadPage, ABC, fields=["datetime", "trade", "size"]):
     def __call__(self, *args, products, **kwargs):
         parameters = dict(products=products)
         records = self.execute(**parameters)
@@ -64,13 +56,8 @@ class AlpacaTicksLatestPage(AlpacaDownloadPage, ABC):
     def execute(self, *args, **kwargs):
         url = self.url(*args, **kwargs)
         json = self.load(url, *args, **kwargs)
-        records = [{"product": product} | self.parser(mapping) for product, mapping in json["trades"].items()]
+        records = self.records(json["trades"], *args, **kwargs)
         return records
-
-    @property
-    def fields(self): return self.__fields
-    @property
-    def parser(self): return self.__parser
 
 
 class AlpacaStockTicksLatestPage(AlpacaTicksLatestPage, url=AlpacaStockTicksLatestURL): pass

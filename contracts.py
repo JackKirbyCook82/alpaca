@@ -7,10 +7,7 @@ Created on Sat Sept 26 2026
 
 """
 
-import numpy as np
-from datetime import datetime as Datetime
-
-from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader
+from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaParsers
 from finance.enumerations import Instrument, Option
 from finance.querys import Contract
 from webscraping.webdatas import WebJSON
@@ -20,11 +17,6 @@ __author__ = "Jack Kirby Cook"
 __all__ = ["AlpacaContractDownloader"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
-
-
-pagination_parser = lambda string: str(string) if string != "None" else None
-expire_parser = lambda string: Datetime.strptime(string, "%Y-%m-%d").date()
-strike_parser = lambda string: np.round(float(string), 2)
 
 
 class AlpacaContractURL(AlpacaDownloadURL, domain="https://paper-api.alpaca.markets", path=["v2", "options", "contracts"], parameters={"show_deliverables": "false", "limit": "10000"}, headers={"accept": "application/json"}):
@@ -37,27 +29,15 @@ class AlpacaContractURL(AlpacaDownloadURL, domain="https://paper-api.alpaca.mark
 
     @staticmethod
     def products(*args, product, **kwargs): return {"underlying_symbols": str(product)}
-    @staticmethod
-    def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if pagination is not None else {}
-
-    @staticmethod
-    def expires(*args, expires=None, **kwargs):
-        if expires is not None: return {"expiration_date_gte": str(expires.minimum.strftime("%Y-%m-%d")), "expiration_date_lte": str(expires.maximum.strftime("%Y-%m-%d"))}
-        else: return {}
-
-    @staticmethod
-    def strikes(*args, strikes=None, **kwargs):
-        if strikes is not None: return {"strike_price_gte": str(strikes.minimum), "strike_price_lte": str(strikes.maximum)}
-        else: return {}
 
 
 class AlpacaContractData(WebJSON, multiple=False, optional=False):
-    class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=pagination_parser, optional=True): pass
+    class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=AlpacaParsers.pagination, optional=True): pass
     class Contracts(WebJSON, key="contracts", locator="//option_contracts[]", parser=Contract, multiple=True, optional=True):
         class Ticker(WebJSON.Text, key="ticker", locator="//underlying_symbol", parser=str): pass
-        class Expire(WebJSON.Text, key="expire", locator="//expiration_date", parser=expire_parser): pass
+        class Expire(WebJSON.Text, key="expire", locator="//expiration_date", parser=AlpacaParsers.expire): pass
         class Option(WebJSON.Text, key="option", locator="//type", parser=Option): pass
-        class Strike(WebJSON.Text, key="strike", locator="//strike_price", parser=strike_parser): pass
+        class Strike(WebJSON.Text, key="strike", locator="//strike_price", parser=AlpacaParsers.strike): pass
 
 
 class AlpacaContractPage(AlpacaDownloadPage, url=AlpacaContractURL, data=AlpacaContractData):

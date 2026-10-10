@@ -7,12 +7,11 @@ Created on Sat Sept 26 2026
 
 """
 
-import numpy as np
 import pandas as pd
 from dataclasses import asdict
 from abc import ABC, abstractmethod
 
-from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaField
+from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader
 from finance.enumerations import Instrument
 from finance.osi import OSI
 
@@ -46,16 +45,7 @@ class AlpacaOptionQuotesLatestURL(AlpacaQuotesLatestURL, path=["v1beta1", "optio
     def products(*args, products, **kwargs): return {"symbols": ",".join([str(OSI(product)) for product in products])}
 
 
-class AlpacaQuotesLatestPage(AlpacaDownloadPage, ABC):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        fields = [AlpacaField("bid", "bp", np.float32), AlpacaField("ask", "ap", np.float32)]
-        fields = fields + [AlpacaField("supply", "as", np.float32), AlpacaField("demand", "bs", np.float32)]
-        fields = fields + [AlpacaField("datetime", "t", lambda string: pd.to_datetime(string, utc=True))]
-        parser = lambda mapping: {field.name: field.parser(mapping[field.code]) for field in self.fields if field.code in mapping.keys()}
-        self.__fields = fields
-        self.__parser = parser
-
+class AlpacaQuotesLatestPage(AlpacaDownloadPage, ABC, fields=["datetime", "bid", "ask", "supply", "demand"]):
     def __call__(self, *args, products, **kwargs):
         parameters = dict(products=products)
         records = self.execute(**parameters)
@@ -66,13 +56,8 @@ class AlpacaQuotesLatestPage(AlpacaDownloadPage, ABC):
     def execute(self, *args, **kwargs):
         url = self.url(*args, **kwargs)
         json = self.load(url, *args, **kwargs)
-        records = [{"product": product} | self.parser(mapping) for product, mapping in json["quotes"].items()]
+        records = self.records(json["quotes"], *args, **kwargs)
         return records
-
-    @property
-    def fields(self): return self.__fields
-    @property
-    def parser(self): return self.__parser
 
 
 class AlpacaStockQuotesLatestPage(AlpacaQuotesLatestPage, url=AlpacaStockQuotesLatestURL): pass

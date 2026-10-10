@@ -7,12 +7,11 @@ Created on Thurs Mar 26 2026
 
 """
 
-import numpy as np
 import pandas as pd
 from dataclasses import asdict
 from abc import ABC, abstractmethod
 
-from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaField
+from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaParsers
 from finance.enumerations import Instrument
 from finance.osi import OSI
 from webscraping.webdatas import WebJSON
@@ -24,8 +23,6 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-pagination_parser = lambda string: str(string) if string != "None" else None
-history_parser = lambda string: pd.to_datetime(string, utc=True)
 options_columns = ["ticker", "expire", "option", "strike", "datetime", "open", "close", "high", "low", "volume"]
 stocks_columns = ["ticker", "datetime", "open", "close", "high", "low", "volume"]
 
@@ -53,18 +50,10 @@ class AlpacaOptionBarsHistoryURL(AlpacaBarsHistoryURL, path=["v1beta1", "options
 
 
 class AlpacaBarsHistoryData(WebJSON, multiple=False, optional=False):
-    class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=pagination_parser, optional=True): pass
+    class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=AlpacaParsers.pagination, optional=True): pass
 
 
-class AlpacaBarsHistoryPage(AlpacaDownloadPage, ABC):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        fields = [AlpacaField("open", "o", np.float32), AlpacaField("close", "c", np.float32), AlpacaField("high", "h", np.float32), AlpacaField("low", "l", np.float32)]
-        fields = fields + [AlpacaField("datetime", "t", history_parser), AlpacaField("volume", "v", np.int64)]
-        parser = lambda mapping: {field.name: field.parser(mapping[field.code]) for field in self.fields if field.code in mapping.keys()}
-        self.__fields = fields
-        self.__parser = parser
-
+class AlpacaBarsHistoryPage(AlpacaDownloadPage, ABC, fields=["datetime", "open", "close", "high", "low", "volume"]):
     def __call__(self, *args, products, frequency, history, **kwargs):
         parameters = dict(products=products, frequency=frequency, history=history)
         records = self.execute(**parameters)
@@ -75,16 +64,11 @@ class AlpacaBarsHistoryPage(AlpacaDownloadPage, ABC):
     def execute(self, *args, pagination=None, **kwargs):
         url = self.url(*args, pagination=pagination, **kwargs)
         json = self.load(url, *args, **kwargs)
-        records = [{"product": product} | self.parser(mapping) for product, contents in json["bars"].items() for mapping in contents]
+        records = self.records(json["bars"], *args, **kwargs)
         data = self.data(json, *args, **kwargs)
         pagination = data["pagination"](*args, **kwargs)
         if not bool(pagination): return list(records)
         else: return list(records) + self.execute(*args, pagination=pagination, **kwargs)
-
-    @property
-    def fields(self): return self.__fields
-    @property
-    def parser(self): return self.__parser
 
 
 class AlpacaStockBarsHistoryPage(AlpacaBarsHistoryPage, url=AlpacaStockBarsHistoryURL, data=AlpacaBarsHistoryData): pass
