@@ -45,7 +45,7 @@ class AlpacaContractPage(AlpacaDownloadPage, url=AlpacaContractURL, data=AlpacaC
         assert expires is not None and bool(expires)
         assert strikes is not None and bool(strikes)
         parameters = dict(product=product, expires=expires, strikes=strikes)
-        contracts = self.execute(**parameters)
+        contracts = self.execute(*args, **parameters, **kwargs)
         return contracts
 
     def execute(self, *args, pagination=None, **kwargs):
