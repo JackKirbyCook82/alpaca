@@ -12,51 +12,28 @@ import pandas as pd
 from abc import ABC
 from typing import Callable
 from dataclasses import dataclass
-from types import SimpleNamespace
 from datetime import datetime as Datetime
 
-from finance.enumerations import Frequency
+from finance.enumerations import Frequency, Instrument, Dataset, Price
 from finance.reporting import Results
 from webscraping.weburl import WebURL
 from webscraping.webpages import WebJSONPage
+from support.meta import CollectionMeta
 from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["AlpacaDownloadPage", "AlpacaUploadPage", "AlpacaDownloadURL", "AlpacaUploadURL", "AlpacaDownloader", "AlpacaParsers"]
+__all__ = ["AlpacaDownloadPage", "AlpacaUploadPage", "AlpacaDownloadURL", "AlpacaUploadURL", "AlpacaDownloader", "AlpacaParsers", "AlpacaColumns"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
 class AlpacaError(Exception): pass
-class AlpacaFieldError(AlpacaError): pass
+class AlpacaColumnError(AlpacaError): pass
 class AlpacaFrequencyError(AlpacaError): pass
 class AlpacaFrequencyByError(AlpacaFrequencyError): pass
 class AlpacaFrequencySpanError(AlpacaFrequencyError): pass
 
-
-@dataclass(frozen=True)
-class AlpacaField: name: str; code: str; parser: Callable
-
-@dataclass(frozen=True)
-class AlpacaParser: name: str; parser: Callable
-
-@dataclass(frozen=True)
-class AlpacaFrequency: by: Frequency; code: str; span: list[int]
-
-
-class AlpacaFields:
-    datetime = AlpacaField("datetime", "t", lambda string: pd.to_datetime(string, utc=True))
-    volume = AlpacaField("volume", "v", np.int64)
-    trade = AlpacaField("trade", "p", np.float32)
-    bid = AlpacaField("bid", "bp", np.float32)
-    ask = AlpacaField("ask", "ap", np.float32)
-    supply = AlpacaField("supply", "as", np.float32)
-    demand = AlpacaField("demand", "bs", np.float32)
-    open = AlpacaField("open", "o", np.float32)
-    close = AlpacaField("close", "c", np.float32)
-    high = AlpacaField("high", "h", np.float32)
-    low = AlpacaField("low", "l", np.float32)
 
 class AlpacaParsers:
     pagination = lambda string: str(string) if string != "None" else None
@@ -64,7 +41,61 @@ class AlpacaParsers:
     history = lambda string: pd.to_datetime(string, utc=True)
     strike = lambda string: np.round(float(string), 2)
 
-class AlpacaFrequencies:
+
+@dataclass(frozen=True)
+class AlpacaField: name: str; code: str; parser: Callable
+class AlpacaFields(metaclass=CollectionMeta):
+    datetime = AlpacaField("datetime", "t", lambda string: pd.to_datetime(string, utc=True))
+    volume = AlpacaField("volume", "v", np.int64)
+    supply = AlpacaField("supply", "as", np.float32)
+    demand = AlpacaField("demand", "bs", np.float32)
+    price = AlpacaField("price", "p", np.float32)
+    bid = AlpacaField("bid", "bp", np.float32)
+    ask = AlpacaField("ask", "ap", np.float32)
+    open = AlpacaField("open", "o", np.float32)
+    close = AlpacaField("close", "c", np.float32)
+    high = AlpacaField("high", "h", np.float32)
+    low = AlpacaField("low", "l", np.float32)
+
+    def __new__(cls, data, columns):
+        generator = cls.generator(data, columns)
+        records = list(generator)
+        return records
+
+    @classmethod
+    def generator(cls, data, columns):
+        fields = [field for column, field in dict(cls).items() if column in columns]
+        for product, contents in data.items():
+            assert isinstance(contents, (list, dict))
+            if isinstance(contents, dict): contents = [contents]
+            for mapping in contents:
+                assert isinstance(mapping, dict)
+                mapping = {field.name: field.parser(mapping[field.code]) for field in fields if field.code in mapping.keys()}
+                yield {"product": product} | mapping
+
+
+@dataclass(frozen=True)
+class AlpacaColumns: dataset: Dataset; price: Price; instrument: Instrument; columns: list[str]
+class AlpacaColumns(metaclass=CollectionMeta):
+    bars_trade_stock = AlpacaColumns(Dataset.BARS, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "open", "close", "high", "low", "volume"])
+    bars_trade_option = AlpacaColumns(Dataset.BARS, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "open", "close", "high", "low", "volume"])
+    ticks_trade_stock = AlpacaColumns(Dataset.TICKS, Price.TRADE, Instrument.STOCK, ["ticker", "expire", "option", "strike", "datetime", "trade", "size"])
+    ticks_trade_option = AlpacaColumns(Dataset.TICKS, Price.TRADE, Instrument.OPTION, ["ticker", "datetime", "trade", "size"])
+    spot_quote_stock = AlpacaColumns(Dataset.SPOT, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "ask", "bid", "supply", "demand"])
+    spot_quote_option = AlpacaColumns(Dataset.SPOT, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "ask", "bid", "supply", "demand"])
+    spot_trade_stock = AlpacaColumns(Dataset.SPOT, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "trade", "ask", "bid", "size", "supply", "demand"])
+    spot_trade_option = AlpacaColumns(Dataset.SPOT, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "trade", "size"])
+
+    def __new__(cls, dataset, price, instrument):
+        key = lambda column: (column.dataset, column.price, column.instrument)
+        columns = {key(column): column for column in dict(cls).values()}
+        try: return columns[dataset, price, instrument]
+        except KeyError: raise AlpacaColumnError
+
+
+@dataclass(frozen=True)
+class AlpacaFrequency: by: Frequency; code: str; span: list[int]
+class AlpacaFrequencies(metaclass=CollectionMeta):
     months = AlpacaFrequency(Frequency.MONTHLY, "M", list(value for value in range(1, 13) if not 12 % value))
     minutes = AlpacaFrequency(Frequency.MINUTELY, "T", list(range(1, 59 + 1)))
     hours = AlpacaFrequency(Frequency.HOURLY, "H", list(range(1, 23 + 1)))
@@ -73,8 +104,7 @@ class AlpacaFrequencies:
 
     def __new__(cls, frequency):
         by, span = frequency.by, frequency.span
-        frequencies = [cls.months, cls.weeks, cls.days, cls.hours, cls.minutes]
-        frequencies = {frequency.by: frequency for frequency in frequencies}
+        frequencies = {frequency.by: frequency for frequency in dict(cls).values()}
         if by not in frequencies.keys(): raise AlpacaFrequencyByError()
         if span not in frequencies[by].span: raise AlpacaFrequencySpanError()
         return f"{int(span)}{str(frequencies[by].code)}"
@@ -106,41 +136,36 @@ class AlpacaDownloadURL(AlpacaURL, headers={"accept": "application/json"}): pass
 
 
 class AlpacaPage(WebJSONPage):
-    def __init_subclass__(cls, /, url=None, data=None, fields=None, **kwargs):
+    def __init_subclass__(cls, /, **kwargs):
         super().__init_subclass__(**kwargs)
-        namespace = SimpleNamespace(url=url, data=data, fields=fields)
-        cls.__namespace__ = namespace
+        namespace = getattr(cls, "__namespace__", {})
+        instrument = kwargs.get("instrument", namespace.get("instrument", None))
+        data = kwargs.get("data", namespace.get("data", None))
+        url = kwargs.get("url", namespace.get("url", None))
+        cls.__namespace__ = dict(instrument=instrument, data=data, url=url)
 
     def __init__(self, *args, authenticator, **kwargs):
         super().__init__(*args, **kwargs)
-        try: self.__fields = [getattr(AlpacaFields, field) for field in self.namespace.fields]
-        except AttributeError: raise AlpacaFieldError()
+        self.__instrument = self.namespace["instrument"]
         self.__authenticator = authenticator
 
     def url(self, *args, **kwargs):
         parameters = dict(authenticator=self.authenticator)
-        return self.namespace.url(*args, **parameters, **kwargs)
+        return self.namespace["url"](*args, **parameters, **kwargs)
 
     def data(self, json, *args, **kwargs):
-        if self.namespace.data is None: return None
-        return self.namespace.data(json, *args, **kwargs)
+        if self.namespace["data"] is None: return None
+        return self.namespace["data"](json, *args, **kwargs)
 
-    def records(self, json, *args, **kwargs):
-        if self.namespace.fields is None: return
-        for product, contents in json.items():
-            assert isinstance(contents, (list, dict))
-            if isinstance(contents, dict): contents = [contents]
-            for mapping in contents:
-                assert isinstance(mapping, dict)
-                mapping = {field.name: field.parser(mapping[field.code]) for field in self.fields if field.code in mapping.keys()}
-                yield {"product": product} | mapping
+    @staticmethod
+    def records(data, *args, columns, **kwargs): return AlpacaFields(data, columns=columns)
 
     @property
     def namespace(self): return type(self).__namespace__
     @property
     def authenticator(self): return self.__authenticator
     @property
-    def fields(self): return self.__fields
+    def instrument(self): return self.__instrument
 
 
 class AlpacaUploadPage(AlpacaPage): pass
@@ -148,27 +173,29 @@ class AlpacaDownloadPage(AlpacaPage): pass
 
 
 class AlpacaDownloader(Results, Logging, ABC):
-    def __init_subclass__(cls, /, page=None, columns=None, instrument=None, **kwargs):
+    def __init_subclass__(cls, /, page=None, instrument=None, **kwargs):
         super().__init_subclass__(**kwargs)
-        namespace = dict(pages=kwargs.get("pages", {}), page=page, columns=columns, instrument=instrument)
-        cls.__namespace__ = SimpleNamespace(**namespace)
+        namespace = getattr(cls, "__namespace__", {})
+        instrument = kwargs.get("instrument", namespace.get("instrument", None))
+        pages = kwargs.get("pages", namespace.get("pages", {}))
+        page = kwargs.get("page", namespace.get("page", None))
+        url = kwargs.get("url", namespace.get("url", None))
+        cls.__namespace__ = dict(instrument=instrument, pages=pages, page=page, url=url)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        namespace = type(self).__namespace__
-        self.__pages = {key: page(*args, **kwargs) for key, page in namespace.pages.items()}
-        self.__page = namespace.page(*args, **kwargs) if namespace.page is not None else None
-        self.__instrument = namespace.instrument
-        self.__columns = namespace.columns
+        self.__pages = {key: page(*args, **kwargs) for key, page in self.namespace["pages"].items()}
+        self.__page = self.namespace["page"](*args, **kwargs) if self.namespace["page"] is not None else None
+        self.__instrument = self.namespace["instrument"]
 
     def scope(self, products, **kwargs):
         if self.instrument is None: raise ValueError(self.instrument)
         return super().scope(products, instrument=self.instrument)
 
     @property
-    def instrument(self): return self.__instrument
+    def namespace(self): return type(self).__namespace__
     @property
-    def columns(self): return self.__columns
+    def instrument(self): return self.__instrument
     @property
     def pages(self): return self.__pages
     @property
