@@ -47,9 +47,10 @@ class AlpacaField: name: str; code: str; parser: Callable
 class AlpacaFields(metaclass=CollectionMeta):
     datetime = AlpacaField("datetime", "t", lambda string: pd.to_datetime(string, utc=True))
     volume = AlpacaField("volume", "v", np.int64)
+    size = AlpacaField("size", "s", np.float32)
     supply = AlpacaField("supply", "as", np.float32)
     demand = AlpacaField("demand", "bs", np.float32)
-    price = AlpacaField("price", "p", np.float32)
+    trade = AlpacaField("trade", "p", np.float32)
     bid = AlpacaField("bid", "bp", np.float32)
     ask = AlpacaField("ask", "ap", np.float32)
     open = AlpacaField("open", "o", np.float32)
@@ -75,21 +76,21 @@ class AlpacaFields(metaclass=CollectionMeta):
 
 
 @dataclass(frozen=True)
-class AlpacaColumns: dataset: Dataset; price: Price; instrument: Instrument; columns: list[str]
+class AlpacaColumn: dataset: Dataset; price: Price; instrument: Instrument; values: list[str]
 class AlpacaColumns(metaclass=CollectionMeta):
-    bars_trade_stock = AlpacaColumns(Dataset.BARS, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "open", "close", "high", "low", "volume"])
-    bars_trade_option = AlpacaColumns(Dataset.BARS, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "open", "close", "high", "low", "volume"])
-    ticks_trade_stock = AlpacaColumns(Dataset.TICKS, Price.TRADE, Instrument.STOCK, ["ticker", "expire", "option", "strike", "datetime", "trade", "size"])
-    ticks_trade_option = AlpacaColumns(Dataset.TICKS, Price.TRADE, Instrument.OPTION, ["ticker", "datetime", "trade", "size"])
-    spot_quote_stock = AlpacaColumns(Dataset.SPOT, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "ask", "bid", "supply", "demand"])
-    spot_quote_option = AlpacaColumns(Dataset.SPOT, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "ask", "bid", "supply", "demand"])
-    spot_trade_stock = AlpacaColumns(Dataset.SPOT, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "trade", "ask", "bid", "size", "supply", "demand"])
-    spot_trade_option = AlpacaColumns(Dataset.SPOT, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "trade", "size"])
+    bars_trade_stock = AlpacaColumn(Dataset.BARS, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "open", "close", "high", "low", "volume"])
+    bars_trade_option = AlpacaColumn(Dataset.BARS, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "open", "close", "high", "low", "volume"])
+    ticks_trade_stock = AlpacaColumn(Dataset.TICKS, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "trade", "size"])
+    ticks_trade_option = AlpacaColumn(Dataset.TICKS, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "trade", "size"])
+    spot_quote_stock = AlpacaColumn(Dataset.SPOT, Price.QUOTE, Instrument.STOCK, ["ticker", "datetime", "ask", "bid", "supply", "demand"])
+    spot_quote_option = AlpacaColumn(Dataset.SPOT, Price.QUOTE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "ask", "bid", "supply", "demand"])
+    spot_trade_stock = AlpacaColumn(Dataset.SPOT, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "trade", "size"])
+    spot_trade_option = AlpacaColumn(Dataset.SPOT, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "trade", "size"])
 
     def __new__(cls, dataset, price, instrument):
         key = lambda column: (column.dataset, column.price, column.instrument)
         columns = {key(column): column for column in dict(cls).values()}
-        try: return columns[dataset, price, instrument]
+        try: return columns[dataset, price, instrument].values
         except KeyError: raise AlpacaColumnError
 
 
@@ -112,13 +113,13 @@ class AlpacaFrequencies(metaclass=CollectionMeta):
 
 class AlpacaURL(WebURL):
     @staticmethod
-    def history(*args, history, **kwargs): return {"start": history.minimum.strftime("%Y-%m-%d"), "end": history.maximum.strftime("%Y-%m-%d")}
-    @staticmethod
-    def frequency(*args, frequency, **kwargs): return {"timeframe": AlpacaFrequencies(frequency)}
+    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
     @staticmethod
     def pagination(*args, pagination=None, **kwargs): return {"page_token": str(pagination)} if pagination is not None else {}
     @staticmethod
-    def headers(*args, authenticator, **kwargs): return {"APCA-API-KEY-ID": str(authenticator.identity), "APCA-API-SECRET-KEY": str(authenticator.code)}
+    def history(*args, history, **kwargs): return {"start": history.minimum.strftime("%Y-%m-%d"), "end": history.maximum.strftime("%Y-%m-%d")}
+    @staticmethod
+    def frequency(*args, frequency, **kwargs): return {"timeframe": AlpacaFrequencies(frequency)}
 
     @staticmethod
     def expires(*args, expires=None, **kwargs):
@@ -173,7 +174,7 @@ class AlpacaDownloadPage(AlpacaPage): pass
 
 
 class AlpacaDownloader(Results, Logging, ABC):
-    def __init_subclass__(cls, /, page=None, instrument=None, **kwargs):
+    def __init_subclass__(cls, /, **kwargs):
         super().__init_subclass__(**kwargs)
         namespace = getattr(cls, "__namespace__", {})
         instrument = kwargs.get("instrument", namespace.get("instrument", None))
