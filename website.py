@@ -14,7 +14,7 @@ from typing import Callable
 from dataclasses import dataclass
 from datetime import datetime as Datetime
 
-from finance.enumerations import Frequency, Instrument, Dataset, Price
+from finance.enumerations import Frequency
 from finance.reporting import Results
 from webscraping.weburl import WebURL
 from webscraping.webpages import WebJSONPage
@@ -29,7 +29,6 @@ __license__ = "MIT License"
 
 
 class AlpacaError(Exception): pass
-class AlpacaColumnError(AlpacaError): pass
 class AlpacaFrequencyError(AlpacaError): pass
 class AlpacaFrequencyByError(AlpacaFrequencyError): pass
 class AlpacaFrequencySpanError(AlpacaFrequencyError): pass
@@ -43,55 +42,20 @@ class AlpacaParsers:
 
 
 @dataclass(frozen=True)
-class AlpacaField: name: str; code: str; parser: Callable
-class AlpacaFields(metaclass=CollectionMeta):
-    datetime = AlpacaField("datetime", "t", lambda string: pd.to_datetime(string, utc=True))
-    volume = AlpacaField("volume", "v", np.int64)
-    size = AlpacaField("size", "s", np.float32)
-    supply = AlpacaField("supply", "as", np.float32)
-    demand = AlpacaField("demand", "bs", np.float32)
-    trade = AlpacaField("trade", "p", np.float32)
-    bid = AlpacaField("bid", "bp", np.float32)
-    ask = AlpacaField("ask", "ap", np.float32)
-    open = AlpacaField("open", "o", np.float32)
-    close = AlpacaField("close", "c", np.float32)
-    high = AlpacaField("high", "h", np.float32)
-    low = AlpacaField("low", "l", np.float32)
-
-    def __new__(cls, data, columns):
-        generator = cls.generator(data, columns)
-        records = list(generator)
-        return records
-
-    @classmethod
-    def generator(cls, data, columns):
-        fields = [field for column, field in dict(cls).items() if column in columns]
-        for product, contents in data.items():
-            assert isinstance(contents, (list, dict))
-            if isinstance(contents, dict): contents = [contents]
-            for mapping in contents:
-                assert isinstance(mapping, dict)
-                mapping = {field.name: field.parser(mapping[field.code]) for field in fields if field.code in mapping.keys()}
-                yield {"product": product} | mapping
-
-
-@dataclass(frozen=True)
-class AlpacaColumn: dataset: Dataset; price: Price; instrument: Instrument; values: list[str]
+class AlpacaColumn: name: str; code: str; parser: Callable
 class AlpacaColumns(metaclass=CollectionMeta):
-    bars_trade_stock = AlpacaColumn(Dataset.BARS, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "open", "close", "high", "low", "volume"])
-    bars_trade_option = AlpacaColumn(Dataset.BARS, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "open", "close", "high", "low", "volume"])
-    ticks_trade_stock = AlpacaColumn(Dataset.TICKS, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "trade", "size"])
-    ticks_trade_option = AlpacaColumn(Dataset.TICKS, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "trade", "size"])
-    spot_quote_stock = AlpacaColumn(Dataset.SPOT, Price.QUOTE, Instrument.STOCK, ["ticker", "datetime", "ask", "bid", "supply", "demand"])
-    spot_quote_option = AlpacaColumn(Dataset.SPOT, Price.QUOTE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "ask", "bid", "supply", "demand"])
-    spot_trade_stock = AlpacaColumn(Dataset.SPOT, Price.TRADE, Instrument.STOCK, ["ticker", "datetime", "trade", "size"])
-    spot_trade_option = AlpacaColumn(Dataset.SPOT, Price.TRADE, Instrument.OPTION, ["ticker", "expire", "option", "strike", "datetime", "trade", "size"])
-
-    def __new__(cls, dataset, price, instrument):
-        key = lambda column: (column.dataset, column.price, column.instrument)
-        columns = {key(column): column for column in dict(cls).values()}
-        try: return columns[dataset, price, instrument].values
-        except KeyError: raise AlpacaColumnError
+    datetime = AlpacaColumn("datetime", "t", lambda string: pd.to_datetime(string, utc=True))
+    volume = AlpacaColumn("volume", "v", np.int64)
+    size = AlpacaColumn("size", "s", np.float32)
+    supply = AlpacaColumn("supply", "as", np.float32)
+    demand = AlpacaColumn("demand", "bs", np.float32)
+    trade = AlpacaColumn("trade", "p", np.float32)
+    bid = AlpacaColumn("bid", "bp", np.float32)
+    ask = AlpacaColumn("ask", "ap", np.float32)
+    open = AlpacaColumn("open", "o", np.float32)
+    close = AlpacaColumn("close", "c", np.float32)
+    high = AlpacaColumn("high", "h", np.float32)
+    low = AlpacaColumn("low", "l", np.float32)
 
 
 @dataclass(frozen=True)
@@ -159,7 +123,15 @@ class AlpacaPage(WebJSONPage):
         return self.namespace["data"](json, *args, **kwargs)
 
     @staticmethod
-    def records(data, *args, columns, **kwargs): return AlpacaFields(data, columns=columns)
+    def records(json, *args, **kwargs):
+        columns = list(dict(AlpacaColumns).values())
+        for product, contents in json.items():
+            assert isinstance(contents, (list, dict))
+            if isinstance(contents, dict): contents = [contents]
+            for mapping in contents:
+                assert isinstance(mapping, dict)
+                mapping = {column.name: column.parser(mapping[column.code]) for column in columns if column.code in mapping.keys()}
+                yield {"product": product} | mapping
 
     @property
     def namespace(self): return type(self).__namespace__

@@ -11,8 +11,8 @@ import pandas as pd
 from dataclasses import asdict
 from abc import ABC, abstractmethod
 
-from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaColumns
-from finance.enumerations import Dataset, Price, Instrument
+from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader
+from finance.enumerations import Price, Instrument
 from finance.osi import OSI
 
 __version__ = "1.0.0"
@@ -47,9 +47,8 @@ class AlpacaSpotPage(AlpacaDownloadPage, ABC):
         key = str(price).lower() + "s"
         url = self.url(*args, price=price, **kwargs)
         json = self.load(url, *args, **kwargs)
-        columns = AlpacaColumns(Dataset.SPOT, price, self.instrument)
-        records = self.records(json[key], *args, columns=columns, **kwargs)
-        return records
+        records = self.records(json[key], *args, **kwargs)
+        return list(records)
 
 
 class AlpacaStockSpotPage(AlpacaSpotPage, url=AlpacaStockSpotURL, instrument=Instrument.STOCK): pass
@@ -61,9 +60,7 @@ class AlpacaSpotDownloader(AlpacaDownloader):
         assert price in (Price.TRADE, Price.QUOTE)
         if not isinstance(products, list): products = [products]
         quotes = list(self.downloader(products, price=price, **kwargs))
-        if not quotes:
-            columns = AlpacaColumns(Dataset.SPOT, price, self.instrument)
-            return pd.DataFrame(columns=columns)
+        if not quotes: return None
         quotes = pd.concat(list(quotes), axis=0)
         quotes = self.parser(quotes, **kwargs)
         return quotes

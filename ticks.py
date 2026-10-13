@@ -11,8 +11,8 @@ import pandas as pd
 from dataclasses import asdict
 from abc import ABC, abstractmethod
 
-from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaParsers, AlpacaColumns
-from finance.enumerations import Dataset, Price, Instrument
+from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaParsers
+from finance.enumerations import Price, Instrument
 from finance.osi import OSI
 from webscraping.webdatas import WebJSON
 
@@ -59,8 +59,7 @@ class AlpacaTicksPage(AlpacaDownloadPage, ABC):
         assert price == Price.TRADE
         url = self.url(*args, pagination=pagination, **kwargs)
         json = self.load(url, *args, **kwargs)
-        columns = AlpacaColumns(Dataset.TICKS, price, self.instrument)
-        records = self.records(json["trades"], *args, columns=columns, **kwargs)
+        records = self.records(json["trades"], *args, **kwargs)
         data = self.data(json, *args, **kwargs)
         pagination = data["pagination"](*args, **kwargs)
         if not bool(pagination): return list(records)
@@ -76,9 +75,7 @@ class AlpacaTicksDownloader(AlpacaDownloader):
         assert price == Price.TRADE
         if not isinstance(products, list): products = [products]
         trades = list(self.downloader(products, price=price, **kwargs))
-        if not trades:
-            columns = AlpacaColumns(Dataset.TICKS, price, self.instrument)
-            return pd.DataFrame(columns=columns)
+        if not trades: return None
         trades = pd.concat(list(trades), axis=0)
         trades = self.parser(trades, **kwargs)
         return trades
