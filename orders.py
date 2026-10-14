@@ -15,7 +15,7 @@ from datetime import date as Date
 from datetime import datetime as Datetime
 
 from alpaca.website import AlpacaDownloadURL, AlpacaUploadURL, AlpacaDownloadPage, AlpacaUploadPage, AlpacaDownloader
-from finance.enumerations import Instrument, Option, Position, Status, Tenure, Terms, Intent, Action, Spread
+from finance.enumerations import Instrument, Right, Position, Status, Tenure, Terms, Intent, Action, Spread
 from finance.osi import OSI
 from webscraping.webpayloads import WebPayload
 from webscraping.webpages import WebJSONPage
@@ -53,13 +53,13 @@ quantity_parser = lambda string: abs(int(string))
 timestamp_parser = lambda string: pd.to_datetime(string)
 ticker_parser = lambda string: OSI(string).ticker
 expire_parser = lambda string: OSI(string).expire
-option_parser = lambda string: OSI(string).option
+right_parser = lambda string: OSI(string).right
 strike_parser = lambda string: OSI(string).strike
 
-order_typing = {"date": Datetime, "order": str, "asset": str, "term": int, "tenure": int, "spread": int, "ticker": str, "expire": Date, "option": int, "strike": float, "position": int, "quantity": int}
-order_formatting = {"date": date_formatter, "term": int, "tenure": int, "spread": int, "expire": date_formatter, "option": int, "position": int}
-order_parsing = {"term": Terms, "tenure": Tenure, "spread": Spread, "expire": date_parser, "option": Option, "position": Position}
-order_columns = ["order", "asset", "date", "term", "tenure", "spread", "ticker", "expire", "option", "strike", "position", "quantity"]
+order_typing = {"date": Datetime, "order": str, "asset": str, "term": int, "tenure": int, "spread": int, "ticker": str, "expire": Date, "right": int, "strike": float, "position": int, "quantity": int}
+order_formatting = {"date": date_formatter, "term": int, "tenure": int, "spread": int, "expire": date_formatter, "right": int, "position": int}
+order_parsing = {"term": Terms, "tenure": Tenure, "spread": Spread, "expire": date_parser, "right": Right, "position": Position}
+order_columns = ["order", "asset", "date", "term", "tenure", "spread", "ticker", "expire", "right", "strike", "position", "quantity"]
 order_header = Header(order_columns, order_typing, order_formatting, order_parsing)
 
 
@@ -106,7 +106,7 @@ class AlpacaOrderData(WebJSON, multiple=False, optional=False):
         class Asset(WebJSON.Text, key="asset", locator="asset_id", parser=str): pass
         class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
         class Expire(WebJSON.Text, key="expire", locator="symbol", parser=expire_parser): pass
-        class Option(WebJSON.Text, key="option", locator="symbol", parser=option_parser): pass
+        class Right(WebJSON.Text, key="right", locator="symbol", parser=right_parser): pass
         class Strike(WebJSON.Text, key="strike", locator="symbol", parser=strike_parser): pass
         class Position(WebJSON.Text, key="position", locator="position_intent", parser=position_parser): pass
         class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=quantity_parser): pass
@@ -146,7 +146,7 @@ class AlpacaOrderDownloadPage(AlpacaDownloadPage, AlpacaOrderPage, url=AlpacaOrd
         return orders
 
 
-class AlpacaOrderUploader(AlpacaDownloader, page=AlpacaOrderUploadPage, columns=order_columns, instrument=Instrument.OPTION):
+class AlpacaOrderUploader(AlpacaDownloader, page=AlpacaOrderUploadPage, instrument=Instrument.OPTION):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__mutex = multiprocessing.Lock()
@@ -154,11 +154,11 @@ class AlpacaOrderUploader(AlpacaDownloader, page=AlpacaOrderUploadPage, columns=
 
     def __call__(self, targets, /, **kwargs):
         assert isinstance(targets, list)
-        if not bool(targets): return pd.DataFrame(columns=self.columns)
+        if not bool(targets): return None
         targets = list(self.filter(targets, **kwargs))
-        if not bool(targets): return pd.DataFrame(columns=self.columns)
+        if not bool(targets): return None
         orders = list(self.uploader(targets, **kwargs))
-        if not bool(orders): return pd.DataFrame(columns=self.columns)
+        if not bool(orders): return None
         orders = pd.concat(list(orders), axis=0)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
@@ -189,7 +189,7 @@ class AlpacaOrderUploader(AlpacaDownloader, page=AlpacaOrderUploadPage, columns=
 class AlpacaOrderDownloader(AlpacaDownloader, page=AlpacaOrderDownloadPage, instrument=Instrument.OPTION):
     def __call__(self, /, **kwargs):
         orders = self.page(**kwargs)
-        if orders is None or bool(orders.empty): return pd.DataFrame(columns=self.columns)
+        if orders is None or bool(orders.empty): return None
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
         scope = self.scope(orders)

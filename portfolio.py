@@ -28,7 +28,7 @@ timestamp_parser = lambda string: pd.to_datetime(string)
 position_parser = lambda string: position_mapping[string, True]
 ticker_parser = lambda string: OSI.parse(string).ticker
 expire_parser = lambda string: OSI.parse(string).expire
-option_parser = lambda string: OSI.parse(string).option
+right_parser = lambda string: OSI.parse(string).right
 strike_parser = lambda string: OSI.parse(string).strike
 quantity_parser = lambda string: abs(int(string))
 portfolio_columns = ["asset", "ticker", "expire", "option", "strike", "position", "quantity", "entry"]
@@ -43,7 +43,7 @@ class AlpacaHoldingsData(WebJSON, multiple=True, optional=True):
     class Asset(WebJSON.Text, key="asset", locator="asset_id", parser=str): pass
     class Ticker(WebJSON.Text, key="ticker", locator="symbol", parser=ticker_parser): pass
     class Expire(WebJSON.Text, key="expire", locator="symbol", parser=expire_parser): pass
-    class Option(WebJSON.Text, key="option", locator="symbol", parser=option_parser): pass
+    class Right(WebJSON.Text, key="right", locator="symbol", parser=right_parser): pass
     class Strike(WebJSON.Text, key="strike", locator="symbol", parser=strike_parser): pass
     class Position(WebJSON.Text, key="position", locator="side", parser=position_parser): pass
     class Quantity(WebJSON.Text, key="quantity", locator="qty", parser=quantity_parser): pass
@@ -81,7 +81,7 @@ class AlpacaAccountPage(AlpacaDownloadPage, url=AlpacaAccountURL, data=AlpacaAcc
 class AlpacaPortfolioDownloader(AlpacaDownloader, pages={"holdings": AlpacaHoldingsPage, "account": AlpacaAccountURL}, columns=portfolio_columns, instrument=Instrument.OPTION):
     def __call__(self, /, **kwargs):
         holdings = self.page["holdings"](**kwargs)
-        if holdings is None or bool(holdings.empty): holdings = pd.DataFrame(columns=self.columns)
+        if holdings is None or bool(holdings.empty): holdings = None
         holdings = holdings.sort_values(by=["asset"], inplace=False)
         holdings = holdings.reset_index(drop=True, inplace=False)
         account = self.pages["account"](**kwargs)

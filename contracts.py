@@ -8,7 +8,7 @@ Created on Sat Sept 26 2026
 """
 
 from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaParsers
-from finance.enumerations import Instrument, Option
+from finance.enumerations import Instrument, Right
 from finance.querys import Contract
 from webscraping.webdatas import WebJSON
 
@@ -36,7 +36,7 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
     class Contracts(WebJSON, key="contracts", locator="//option_contracts[]", parser=Contract, multiple=True, optional=True):
         class Ticker(WebJSON.Text, key="ticker", locator="//underlying_symbol", parser=str): pass
         class Expire(WebJSON.Text, key="expire", locator="//expiration_date", parser=AlpacaParsers.expire): pass
-        class Option(WebJSON.Text, key="option", locator="//type", parser=Option): pass
+        class Right(WebJSON.Text, key="option", locator="//type", parser=Right): pass
         class Strike(WebJSON.Text, key="strike", locator="//strike_price", parser=AlpacaParsers.strike): pass
 
 
