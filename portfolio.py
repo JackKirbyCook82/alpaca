@@ -26,12 +26,11 @@ __license__ = "MIT License"
 position_mapping = RDict({Position.LONG: "buy", Position.SHORT: "sell"})
 timestamp_parser = lambda string: pd.to_datetime(string)
 position_parser = lambda string: position_mapping[string, True]
-ticker_parser = lambda string: OSI.parse(string).ticker
-expire_parser = lambda string: OSI.parse(string).expire
-right_parser = lambda string: OSI.parse(string).right
-strike_parser = lambda string: OSI.parse(string).strike
+ticker_parser = lambda string: OSI(string).ticker
+expire_parser = lambda string: OSI(string).expire
+right_parser = lambda string: OSI(string).right
+strike_parser = lambda string: OSI(string).strike
 quantity_parser = lambda string: abs(int(string))
-portfolio_columns = ["asset", "ticker", "expire", "option", "strike", "position", "quantity", "entry"]
 
 
 class AlpacaPortfolioURL(AlpacaDownloadURL, domain="https://paper-api.alpaca.markets"): pass
@@ -78,13 +77,13 @@ class AlpacaAccountPage(AlpacaDownloadPage, url=AlpacaAccountURL, data=AlpacaAcc
         return series
 
 
-class AlpacaPortfolioDownloader(AlpacaDownloader, pages={"holdings": AlpacaHoldingsPage, "account": AlpacaAccountURL}, columns=portfolio_columns, instrument=Instrument.OPTION):
+class AlpacaPortfolioDownloader(AlpacaDownloader, pages={"holdings": AlpacaHoldingsPage, "account": AlpacaAccountPage}, instrument=Instrument.OPTION):
     def __call__(self, /, **kwargs):
-        holdings = self.page["holdings"](**kwargs)
-        if holdings is None or bool(holdings.empty): holdings = None
+        account = self.pages["account"](**kwargs)
+        holdings = self.pages["holdings"](**kwargs)
+        if holdings is None or bool(holdings.empty): return None
         holdings = holdings.sort_values(by=["asset"], inplace=False)
         holdings = holdings.reset_index(drop=True, inplace=False)
-        account = self.pages["account"](**kwargs)
         scope = self.scope(holdings)
         results = self.results(scope=scope, size=len(holdings.index))
         self.console("Downloaded", results)
