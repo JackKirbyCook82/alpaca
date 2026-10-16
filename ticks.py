@@ -8,7 +8,6 @@ Created on Sat Sept 26 2026
 """
 
 import pandas as pd
-from dataclasses import asdict
 from abc import ABC, abstractmethod
 
 from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaParsers
@@ -18,7 +17,7 @@ from webscraping.webdatas import WebJSON
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["AlpacaStockTicksDownloader", "AlpacaOptionTicksDownloader"]
+__all__ = ["AlpacaTradeStockTicksDownloader", "AlpacaTradeOptionTicksDownloader"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -52,11 +51,10 @@ class AlpacaTicksPage(AlpacaDownloadPage, ABC):
     def __call__(self, *args, **kwargs):
         records = self.execute(*args, **kwargs)
         if not records: return None
-        bars = pd.DataFrame.from_records(records)
-        return bars
+        ticks = pd.DataFrame.from_records(records)
+        return ticks
 
-    def execute(self, *args, price, pagination=None, **kwargs):
-        assert price == Price.TRADE
+    def execute(self, *args, pagination=None, **kwargs):
         url = self.url(*args, pagination=pagination, **kwargs)
         json = self.load(url, *args, **kwargs)
         records = self.records(json["trades"], *args, **kwargs)
@@ -71,50 +69,30 @@ class AlpacaOptionTicksPage(AlpacaTicksPage, url=AlpacaOptionTicksURL, data=Alpa
 
 
 class AlpacaTicksDownloader(AlpacaDownloader):
-    def __call__(self, products, /, price, **kwargs):
-        assert price == Price.TRADE
+    def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
-        trades = list(self.downloader(products, price=price, **kwargs))
-        if not trades: return None
-        trades = pd.concat(list(trades), axis=0)
-        trades = self.parser(trades, **kwargs)
-        return trades
+        ticks = list(self.downloader(products, **kwargs))
+        if not ticks: return None
+        ticks = pd.concat(list(ticks), axis=0)
+        ticks = self.parse(ticks, **kwargs)
+        return ticks
 
     def downloader(self, products, /, **kwargs):
         products = [products[index:index + 100] for index in range(0, len(products), 100)]
         for products in products:
             scope = self.scope(products)
-            trades = self.page(products=products, **kwargs)
-            if trades is None or bool(trades.empty): continue
-            results = self.results(scope=scope, size=len(trades))
+            ticks = self.page(products=products, **kwargs)
+            if ticks is None or bool(ticks.empty): continue
+            results = self.results(scope=scope, size=len(ticks))
             self.console("Downloaded", results)
-            yield trades
-
-    @staticmethod
-    @abstractmethod
-    def parser(trades, /, **kwargs): pass
+            yield ticks
 
 
-class AlpacaStockTicksDownloader(AlpacaTicksDownloader, page=AlpacaStockTicksPage, instrument=Instrument.STOCK):
-    @staticmethod
-    def parser(trades, /, **kwargs):
-        trades["datetime"] = pd.to_datetime(trades["datetime"])
-        trades = trades.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
-        trades = trades.rename(columns={"product": "ticker"})
-        trades = trades.reset_index(drop=True, inplace=False)
-        return trades
+class AlpacaStockTicksDownloader(AlpacaTicksDownloader, page=AlpacaStockTicksPage, instrument=Instrument.STOCK): pass
+class AlpacaOptionTicksDownloader(AlpacaTicksDownloader, page=AlpacaOptionTicksPage, instrument=Instrument.OPTION): pass
 
-
-class AlpacaOptionTicksDownloader(AlpacaTicksDownloader, page=AlpacaOptionTicksPage, instrument=Instrument.OPTION):
-    @staticmethod
-    def parser(trades, /, **kwargs):
-        trades["datetime"] = pd.to_datetime(trades["datetime"])
-        trades = trades.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
-        trades = trades.rename(columns={"product": "osi"})
-        contracts = pd.DataFrame.from_records(trades["osi"].map(OSI).map(asdict), index=trades.index)
-        trades = pd.concat([trades, contracts], axis=1)
-        trades = trades.reset_index(drop=True, inplace=False)
-        return trades
+class AlpacaTradeStockTicksDownloader(AlpacaStockTicksDownloader, price=Price.TRADE): pass
+class AlpacaTradeOptionTicksDownloader(AlpacaOptionTicksDownloader, price=Price.TRADE): pass
 
 
 

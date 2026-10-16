@@ -8,7 +8,6 @@ Created on Thurs Mar 26 2026
 """
 
 import pandas as pd
-from dataclasses import asdict
 from abc import ABC, abstractmethod
 
 from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaParsers
@@ -18,7 +17,7 @@ from webscraping.webdatas import WebJSON
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["AlpacaStockBarsDownloader", "AlpacaOptionBarsDownloader"]
+__all__ = ["AlpacaTradeStockBarsDownloader", "AlpacaTradeOptionBarsDownloader"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -56,8 +55,7 @@ class AlpacaBarsPage(AlpacaDownloadPage, ABC):
         bars = pd.DataFrame.from_records(records)
         return bars
 
-    def execute(self, *args, price, pagination=None, **kwargs):
-        assert price == Price.TRADE
+    def execute(self, *args, pagination=None, **kwargs):
         url = self.url(*args, pagination=pagination, **kwargs)
         json = self.load(url, *args, **kwargs)
         records = self.records(json["bars"], *args, **kwargs)
@@ -72,13 +70,12 @@ class AlpacaOptionBarsPage(AlpacaBarsPage, url=AlpacaOptionBarsURL, data=AlpacaB
 
 
 class AlpacaBarsDownloader(AlpacaDownloader):
-    def __call__(self, products, /, price, **kwargs):
-        assert price == Price.TRADE
+    def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
-        bars = list(self.downloader(products, price=price, **kwargs))
+        bars = list(self.downloader(products, **kwargs))
         if not bars: return None
         bars = pd.concat(list(bars), axis=0)
-        bars = self.parser(bars, **kwargs)
+        bars = self.parse(bars, **kwargs)
         return bars
 
     def downloader(self, products, /, **kwargs):
@@ -91,32 +88,12 @@ class AlpacaBarsDownloader(AlpacaDownloader):
             self.console("Downloaded", results)
             yield bars
 
-    @staticmethod
-    @abstractmethod
-    def parser(bars, /, **kwargs): pass
 
+class AlpacaStockBarsDownloader(AlpacaBarsDownloader, page=AlpacaStockBarsPage, instrument=Instrument.STOCK): pass
+class AlpacaOptionBarsDownloader(AlpacaBarsDownloader, page=AlpacaOptionBarsPage, instrument=Instrument.OPTION): pass
 
-class AlpacaStockBarsDownloader(AlpacaBarsDownloader, page=AlpacaStockBarsPage, instrument=Instrument.STOCK):
-    @staticmethod
-    def parser(bars, /, **kwargs):
-        bars["datetime"] = pd.to_datetime(bars["datetime"])
-        bars = bars.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
-        bars = bars.rename(columns={"product": "ticker"})
-        bars = bars.reset_index(drop=True, inplace=False)
-        return bars
-
-
-class AlpacaOptionBarsDownloader(AlpacaBarsDownloader, page=AlpacaOptionBarsPage, instrument=Instrument.OPTION):
-    @staticmethod
-    def parser(bars, /, **kwargs):
-        bars["datetime"] = pd.to_datetime(bars["datetime"])
-        bars = bars.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
-        bars = bars.rename(columns={"product": "osi"})
-        contracts = pd.DataFrame.from_records(bars["osi"].map(OSI).map(asdict), index=bars.index)
-        bars = pd.concat([bars, contracts], axis=1)
-        bars = bars.reset_index(drop=True, inplace=False)
-        return bars
-
+class AlpacaTradeStockBarsDownloader(AlpacaStockBarsDownloader, price=Price.TRADE): pass
+class AlpacaTradeOptionBarsDownloader(AlpacaOptionBarsDownloader, price=Price.TRADE): pass
 
 
 

@@ -8,8 +8,7 @@ Created on Sun Oct 1 2026
 """
 
 import pandas as pd
-from dataclasses import asdict
-from abc import ABC, abstractmethod
+from abc import ABC
 
 from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader
 from finance.enumerations import Price, Instrument
@@ -39,8 +38,8 @@ class AlpacaSpotPage(AlpacaDownloadPage, ABC):
     def __call__(self, *args, **kwargs):
         records = self.execute(*args, **kwargs)
         if not records: return None
-        bars = pd.DataFrame.from_records(records)
-        return bars
+        spot = pd.DataFrame.from_records(records)
+        return spot
 
     def execute(self, *args, price, **kwargs):
         assert price in (Price.TRADE, Price.QUOTE)
@@ -56,48 +55,33 @@ class AlpacaOptionSpotPage(AlpacaSpotPage, url=AlpacaOptionSpotURL, instrument=I
 
 
 class AlpacaSpotDownloader(AlpacaDownloader):
-    def __call__(self, products, /, price, **kwargs):
-        assert price in (Price.TRADE, Price.QUOTE)
+    def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
-        quotes = list(self.downloader(products, price=price, **kwargs))
-        if not quotes: return None
-        quotes = pd.concat(list(quotes), axis=0)
-        quotes = self.parser(quotes, **kwargs)
-        return quotes
+        spot = list(self.downloader(products, **kwargs))
+        if not spot: return None
+        spot = pd.concat(list(spot), axis=0)
+        spot = self.parse(spot, **kwargs)
+        return spot
 
     def downloader(self, products, /, **kwargs):
         products = [products[index:index + 100] for index in range(0, len(products), 100)]
         for products in products:
             scope = self.scope(products)
-            quotes = self.page(products=products, **kwargs)
-            if quotes is None or bool(quotes.empty): continue
-            results = self.results(scope=scope, size=len(quotes))
+            quotes = self.page(products=products, price=Price.TRADE, **kwargs)
+            trades = self.page(products=products, price=Price.QUOTE, **kwargs)
+            if quotes is None and trades is None: continue
+            if bool(quotes.empty) and bool(trades.empty): continue
+            if quotes is None or bool(quotes.empty): yield trades
+            if trades is None or bool(trades.empty): yield quotes
+            spot = pd.merge(quotes, trades, on=['product', 'datetime'], how='outer')
+            spot = spot.sort_values(['product', 'datetime']).reset_index(drop=True)
+            results = self.results(scope=scope, size=len(spot))
             self.console("Downloaded", results)
             yield quotes
 
-    @staticmethod
-    @abstractmethod
-    def parser(quotes, /, **kwargs): pass
+
+class AlpacaStockSpotDownloader(AlpacaSpotDownloader, page=AlpacaStockSpotPage, instrument=Instrument.STOCK): pass
+class AlpacaOptionSpotDownloader(AlpacaSpotDownloader, page=AlpacaOptionSpotPage, instrument=Instrument.OPTION): psas
 
 
-class AlpacaStockSpotDownloader(AlpacaSpotDownloader, page=AlpacaStockSpotPage, instrument=Instrument.STOCK):
-    @staticmethod
-    def parser(quotes, /, **kwargs):
-        quotes["datetime"] = pd.to_datetime(quotes["datetime"])
-        quotes = quotes.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
-        quotes = quotes.rename(columns={"product": "ticker"})
-        quotes = quotes.reset_index(drop=True, inplace=False)
-        return quotes
-
-
-class AlpacaOptionSpotDownloader(AlpacaSpotDownloader, page=AlpacaOptionSpotPage, instrument=Instrument.OPTION):
-    @staticmethod
-    def parser(quotes, /, **kwargs):
-        quotes["datetime"] = pd.to_datetime(quotes["datetime"])
-        quotes = quotes.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
-        quotes = quotes.rename(columns={"product": "osi"})
-        contracts = pd.DataFrame.from_records(quotes["osi"].map(OSI).map(asdict), index=quotes.index)
-        quotes = pd.concat([quotes, contracts], axis=1)
-        quotes = quotes.reset_index(drop=True, inplace=False)
-        return quotes
 

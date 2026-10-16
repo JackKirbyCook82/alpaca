@@ -11,11 +11,12 @@ import numpy as np
 import pandas as pd
 from abc import ABC
 from typing import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from datetime import datetime as Datetime
 
-from finance.enumerations import Frequency
+from finance.enumerations import Frequency, Instrument
 from finance.reporting import Results
+from finance.osi import OSI
 from webscraping.weburl import WebURL
 from webscraping.webpages import WebJSONPage
 from support.meta import CollectionMeta
@@ -150,25 +151,42 @@ class AlpacaDownloader(Results, Logging, ABC):
         super().__init_subclass__(**kwargs)
         namespace = getattr(cls, "__namespace__", {})
         instrument = kwargs.get("instrument", namespace.get("instrument", None))
+        price = kwargs.get("price", namespace.get("price", None))
         pages = kwargs.get("pages", namespace.get("pages", {}))
         page = kwargs.get("page", namespace.get("page", None))
         url = kwargs.get("url", namespace.get("url", None))
-        cls.__namespace__ = dict(instrument=instrument, pages=pages, page=page, url=url)
+        cls.__namespace__ = dict(instrument=instrument, price=price, pages=pages, page=page, url=url)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__pages = {key: page(*args, **kwargs) for key, page in self.namespace["pages"].items()}
         self.__page = self.namespace["page"](*args, **kwargs) if self.namespace["page"] is not None else None
         self.__instrument = self.namespace["instrument"]
+        self.__price = self.namespace["price"]
 
     def scope(self, products, **kwargs):
         if self.instrument is None: raise ValueError(self.instrument)
         return super().scope(products, instrument=self.instrument)
 
+    def parse(self, dataframe, /, **kwargs):
+        dataframe["datetime"] = pd.to_datetime(dataframe["datetime"])
+        dataframe = dataframe.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
+        dataframe = dataframe.reset_index(drop=True, inplace=False)
+        if self.instrument == Instrument.STOCK: product = "ticker"
+        elif self.instrument == Instrument.OPTION: product = "option"
+        else: raise ValueError(self.instrument)
+        dataframe = dataframe.rename(columns={"product": product})
+        if self.instrument == Instrument.OPTION:
+            contracts = pd.DataFrame.from_records(dataframe["osi"].map(OSI).map(asdict), index=dataframe.index)
+            dataframe = pd.concat([dataframe, contracts], axis=1)
+        return dataframe
+
     @property
     def namespace(self): return type(self).__namespace__
     @property
     def instrument(self): return self.__instrument
+    @property
+    def price(self): return self.__price
     @property
     def pages(self): return self.__pages
     @property
