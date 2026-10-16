@@ -81,7 +81,7 @@ class AlpacaSpotDownloader(AlpacaDownloader):
 
 
 class AlpacaStockSpotDownloader(AlpacaSpotDownloader, page=AlpacaStockSpotPage, instrument=Instrument.STOCK): pass
-class AlpacaOptionSpotDownloader(AlpacaSpotDownloader, page=AlpacaOptionSpotPage, instrument=Instrument.OPTION): psas
+class AlpacaOptionSpotDownloader(AlpacaSpotDownloader, page=AlpacaOptionSpotPage, instrument=Instrument.OPTION): pass
 
 
 
