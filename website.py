@@ -152,10 +152,12 @@ class AlpacaDownloader(Results, Logging, ABC):
         namespace = getattr(cls, "__namespace__", {})
         instrument = kwargs.get("instrument", namespace.get("instrument", None))
         price = kwargs.get("price", namespace.get("price", None))
+        limit = kwargs.get("limit", namespace.get("limit", 100))
         pages = kwargs.get("pages", namespace.get("pages", {}))
         page = kwargs.get("page", namespace.get("page", None))
         url = kwargs.get("url", namespace.get("url", None))
-        cls.__namespace__ = dict(instrument=instrument, price=price, pages=pages, page=page, url=url)
+        namespace = dict(instrument=instrument, price=price, limit=limit, pages=pages, page=page, url=url)
+        cls.__namespace__ = namespace
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -163,6 +165,7 @@ class AlpacaDownloader(Results, Logging, ABC):
         self.__page = self.namespace["page"](*args, **kwargs) if self.namespace["page"] is not None else None
         self.__instrument = self.namespace["instrument"]
         self.__price = self.namespace["price"]
+        self.__limit = self.namespace["limit"]
 
     def scope(self, products, **kwargs):
         if self.instrument is None: raise ValueError(self.instrument)
@@ -185,6 +188,8 @@ class AlpacaDownloader(Results, Logging, ABC):
     def namespace(self): return type(self).__namespace__
     @property
     def instrument(self): return self.__instrument
+    @property
+    def limit(self): return self.__limit
     @property
     def price(self): return self.__price
     @property

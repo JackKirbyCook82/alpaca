@@ -64,7 +64,7 @@ class AlpacaSpotDownloader(AlpacaDownloader):
         return spot
 
     def downloader(self, products, /, **kwargs):
-        products = [products[index:index + 100] for index in range(0, len(products), 100)]
+        products = [products[index:index + self.limit] for index in range(0, len(products), self.limit)]
         for products in products:
             scope = self.scope(products)
             quotes = self.page(products=products, price=Price.TRADE, **kwargs)
