@@ -46,7 +46,6 @@ class AlpacaParsers:
 class AlpacaColumn: name: str; code: str; parser: Callable
 class AlpacaColumns(metaclass=CollectionMeta):
     datetime = AlpacaColumn("datetime", "t", lambda string: pd.to_datetime(string, utc=True))
-    volume = AlpacaColumn("volume", "v", np.int64)
     size = AlpacaColumn("size", "s", np.float32)
     supply = AlpacaColumn("supply", "as", np.float32)
     demand = AlpacaColumn("demand", "bs", np.float32)
