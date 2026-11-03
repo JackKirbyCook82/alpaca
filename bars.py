@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 
 from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaParsers
 from finance.enumerations import Price, Instrument
-from finance.variables import OSI
+from finance.options import OSI
 from webscraping.webdatas import WebJSON
 
 __version__ = "1.0.0"

@@ -12,7 +12,7 @@ from abc import ABC
 
 from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader
 from finance.enumerations import Price, Instrument
-from finance.variables import OSI
+from finance.options import OSI
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
