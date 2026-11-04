@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader
 from finance.enumerations import Instrument, Position
-from finance.options import OSI
+from finance.variables import OSI
 from webscraping.webdatas import WebJSON
 from support.custom import ReversibleDict as RDict
 

@@ -16,7 +16,7 @@ from datetime import datetime as Datetime
 
 from alpaca.website import AlpacaDownloadURL, AlpacaUploadURL, AlpacaDownloadPage, AlpacaUploadPage, AlpacaDownloader
 from finance.enumerations import Instrument, Right, Position, Status, Tenure, Terms, Intent, Action, Spread
-from finance.options import OSI
+from finance.variables import OSI
 from webscraping.webpayloads import WebPayload
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON

@@ -16,7 +16,7 @@ from datetime import datetime as Datetime
 
 from finance.enumerations import Frequency, Instrument
 from finance.reporting import Results
-from finance.options import OSI
+from finance.variables import OSI
 from webscraping.weburl import WebURL
 from webscraping.webpages import WebJSONPage
 from support.meta import CollectionMeta

@@ -64,15 +64,15 @@ class AlpacaContractDownloader(AlpacaDownloader, page=AlpacaContractPage, instru
         contracts = self.downloader(products, **kwargs)
         contracts = list(contracts)
         contracts.sort(key=lambda contract: (contract.ticker, contract.expire))
+        scope = self.scope(contracts, instrument=Instrument.CONTRACT)
+        results = self.results(scope, size=len(contracts))
+        self.console("Downloaded", results)
         return contracts
 
     def downloader(self, products, /, **kwargs):
         for product in products:
-            scope = self.scope([product])
             contracts = self.page(product=product, **kwargs)
-            results = self.results(scope=scope, size=len(contracts))
-            self.console("Downloaded", results)
-            for contract in contracts: yield contract
+            yield from iter(contracts)
 
 
 
