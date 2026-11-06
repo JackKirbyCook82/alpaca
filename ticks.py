@@ -10,7 +10,7 @@ Created on Sat Sept 26 2026
 import pandas as pd
 from abc import ABC, abstractmethod
 
-from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaParsers
+from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream, AlpacaParsers
 from finance.enumerations import Price, Instrument
 from finance.variables import OSI
 from webscraping.webdatas import WebJSON
@@ -47,7 +47,7 @@ class AlpacaTicksData(WebJSON, multiple=False, optional=False):
     class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=AlpacaParsers.pagination, optional=True): pass
 
 
-class AlpacaTicksPage(AlpacaDownloadPage, ABC):
+class AlpacaTicksPage(AlpacaPage, ABC):
     def __call__(self, *args, **kwargs):
         records = self.execute(*args, **kwargs)
         if not records: return None
@@ -68,7 +68,7 @@ class AlpacaStockTicksPage(AlpacaTicksPage, url=AlpacaStockTicksURL, data=Alpaca
 class AlpacaOptionTicksPage(AlpacaTicksPage, url=AlpacaOptionTicksURL, data=AlpacaTicksData, instrument=Instrument.OPTION): pass
 
 
-class AlpacaTicksDownloader(AlpacaDownloader):
+class AlpacaTicksDownloader(AlpacaStream):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         ticks = list(self.downloader(products, **kwargs))
@@ -83,7 +83,7 @@ class AlpacaTicksDownloader(AlpacaDownloader):
             scope = self.scope(products)
             ticks = self.page(products=products, **kwargs)
             if ticks is None or bool(ticks.empty): continue
-            results = self.results(scope=scope, size=len(ticks))
+            results = self.results(scope, len(ticks), self.instrument)
             self.console("Downloaded", results)
             yield ticks
 

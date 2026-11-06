@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from datetime import date as Date
 from datetime import datetime as Datetime
 
-from alpaca.website import AlpacaDownloadURL, AlpacaUploadURL, AlpacaDownloadPage, AlpacaUploadPage, AlpacaDownloader
+from alpaca.website import AlpacaDownloadURL, AlpacaUploadURL, AlpacaPage, AlpacaStream
 from finance.enumerations import Instrument, Right, Position, Status, Tenure, Terms, Intent, Action, Spread
 from finance.variables import OSI
 from webscraping.webpayloads import WebPayload
@@ -128,7 +128,7 @@ class AlpacaOrderPage(WebJSONPage, ABC):
     def data(self, json, *args, **kwargs): pass
 
 
-class AlpacaOrderUploadPage(AlpacaUploadPage, AlpacaOrderPage, url=AlpacaOrderUploadURL, data=AlpacaOrderData):
+class AlpacaOrderUploadPage(AlpacaPage, AlpacaOrderPage, url=AlpacaOrderUploadURL, data=AlpacaOrderData):
     def __call__(self, *args, target, tenure, term, **kwargs):
         url = self.url(*args, **kwargs)
         securities = [{"osi": record.osi, "purpose": record.purpose, "action": record.purpose.action, "quantity": record.quantity} for record in target]
@@ -138,7 +138,7 @@ class AlpacaOrderUploadPage(AlpacaUploadPage, AlpacaOrderPage, url=AlpacaOrderUp
         return orders
 
 
-class AlpacaOrderDownloadPage(AlpacaDownloadPage, AlpacaOrderPage, url=AlpacaOrderDownloadURL, data=AlpacaOrderData):
+class AlpacaOrderDownloadPage(AlpacaPage, AlpacaOrderPage, url=AlpacaOrderDownloadURL, data=AlpacaOrderData):
     def __call__(self, *args, tickers, dates, **kwargs):
         url = self.url(*args, tickers=tickers, dates=dates, **kwargs)
         json = self.load(url, *args, payload=None, **kwargs)
@@ -146,7 +146,7 @@ class AlpacaOrderDownloadPage(AlpacaDownloadPage, AlpacaOrderPage, url=AlpacaOrd
         return orders
 
 
-class AlpacaOrderUploader(AlpacaDownloader, page=AlpacaOrderUploadPage, instrument=Instrument.OPTION):
+class AlpacaOrderUploader(AlpacaStream, page=AlpacaOrderUploadPage, instrument=Instrument.OPTION):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__mutex = multiprocessing.Lock()
@@ -163,7 +163,7 @@ class AlpacaOrderUploader(AlpacaDownloader, page=AlpacaOrderUploadPage, instrume
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
         scope = self.scope(orders)
-        results = self.results(scope=scope, size=len(orders.index))
+        results = self.results(scope, len(orders.index), self.instrument)
         self.console("Uploaded", results)
         return orders
 
@@ -186,14 +186,14 @@ class AlpacaOrderUploader(AlpacaDownloader, page=AlpacaOrderUploadPage, instrume
     def mutex(self): return self.__mutex
 
 
-class AlpacaOrderDownloader(AlpacaDownloader, page=AlpacaOrderDownloadPage, instrument=Instrument.OPTION):
+class AlpacaOrderDownloader(AlpacaStream, page=AlpacaOrderDownloadPage, instrument=Instrument.OPTION):
     def __call__(self, /, **kwargs):
         orders = self.page(**kwargs)
         if orders is None or bool(orders.empty): return None
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
         scope = self.scope(orders)
-        results = self.results(scope=scope, size=len(orders.index))
+        results = self.results(scope, len(orders.index), self.instrument)
         self.console("Downloaded", results)
         return orders
 

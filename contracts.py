@@ -7,7 +7,7 @@ Created on Sat Sept 26 2026
 
 """
 
-from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader, AlpacaParsers
+from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream, AlpacaParsers
 from finance.enumerations import Instrument, Right
 from finance.querys import Contract
 from webscraping.webdatas import WebJSON
@@ -40,7 +40,7 @@ class AlpacaContractData(WebJSON, multiple=False, optional=False):
         class Strike(WebJSON.Text, key="strike", locator="//strike_price", parser=AlpacaParsers.strike): pass
 
 
-class AlpacaContractPage(AlpacaDownloadPage, url=AlpacaContractURL, data=AlpacaContractData):
+class AlpacaContractPage(AlpacaPage, url=AlpacaContractURL, data=AlpacaContractData):
     def __call__(self, *args, product, expires, strikes, **kwargs):
         assert expires is not None and bool(expires)
         assert strikes is not None and bool(strikes)
@@ -58,14 +58,14 @@ class AlpacaContractPage(AlpacaDownloadPage, url=AlpacaContractURL, data=AlpacaC
         else: return list(records) + self.execute(*args, pagination=pagination, **kwargs)
 
 
-class AlpacaContractDownloader(AlpacaDownloader, page=AlpacaContractPage, instrument=Instrument.STOCK):
+class AlpacaContractDownloader(AlpacaStream, page=AlpacaContractPage):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         contracts = self.downloader(products, **kwargs)
         contracts = list(contracts)
         contracts.sort(key=lambda contract: (contract.ticker, contract.expire))
-        scope = self.scope(contracts, instrument=Instrument.CONTRACT)
-        results = self.results(scope, size=len(contracts))
+        scope = self.scope(contracts)
+        results = self.results(scope, len(contracts), "contract")
         self.console("Downloaded", results)
         return contracts
 

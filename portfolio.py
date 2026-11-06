@@ -10,7 +10,7 @@ Created on Sun Jul 5 2026
 import pandas as pd
 from types import SimpleNamespace
 
-from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader
+from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream
 from finance.enumerations import Instrument, Position
 from finance.variables import OSI
 from webscraping.webdatas import WebJSON
@@ -55,7 +55,7 @@ class AlpacaAccountData(WebJSON, multiple=False, optional=False):
     class Value(WebJSON.Text, key="value", locator="portfolio_value", parser=float): pass
 
 
-class AlpacaHoldingsPage(AlpacaDownloadPage, url=AlpacaHoldingsURL, data=AlpacaHoldingsData):
+class AlpacaHoldingsPage(AlpacaPage, url=AlpacaHoldingsURL, data=AlpacaHoldingsData):
     def __call__(self, *args, **kwargs):
         url = self.url(*args, **kwargs)
         json = self.load(url, *args, **kwargs)
@@ -67,7 +67,7 @@ class AlpacaHoldingsPage(AlpacaDownloadPage, url=AlpacaHoldingsURL, data=AlpacaH
         dataframe["strike"] = pd.to_numeric(dataframe["strike"])
         return dataframe
 
-class AlpacaAccountPage(AlpacaDownloadPage, url=AlpacaAccountURL, data=AlpacaAccountData):
+class AlpacaAccountPage(AlpacaPage, url=AlpacaAccountURL, data=AlpacaAccountData):
     def __call__(self, *args, **kwargs):
         url = self.url(*args, **kwargs)
         json = self.load(url, *args, **kwargs)
@@ -77,7 +77,7 @@ class AlpacaAccountPage(AlpacaDownloadPage, url=AlpacaAccountURL, data=AlpacaAcc
         return series
 
 
-class AlpacaPortfolioDownloader(AlpacaDownloader, pages={"holdings": AlpacaHoldingsPage, "account": AlpacaAccountPage}, instrument=Instrument.OPTION):
+class AlpacaPortfolioDownloader(AlpacaStream, pages={"holdings": AlpacaHoldingsPage, "account": AlpacaAccountPage}, instrument=Instrument.OPTION):
     def __call__(self, /, **kwargs):
         account = self.pages["account"](**kwargs)
         holdings = self.pages["holdings"](**kwargs)
@@ -85,7 +85,7 @@ class AlpacaPortfolioDownloader(AlpacaDownloader, pages={"holdings": AlpacaHoldi
         holdings = holdings.sort_values(by=["asset"], inplace=False)
         holdings = holdings.reset_index(drop=True, inplace=False)
         scope = self.scope(holdings)
-        results = self.results(scope=scope, size=len(holdings.index))
+        results = self.results(scope, len(holdings.index), self.instrument)
         self.console("Downloaded", results)
         portfolio = SimpleNamespace(holdings=holdings, account=account)
         return portfolio

@@ -10,7 +10,7 @@ Created on Sun Oct 1 2026
 import pandas as pd
 from abc import ABC
 
-from alpaca.website import AlpacaDownloadURL, AlpacaDownloadPage, AlpacaDownloader
+from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream
 from finance.enumerations import Price, Instrument
 from finance.variables import OSI
 
@@ -34,7 +34,7 @@ class AlpacaOptionSpotURL(AlpacaSpotURL, path=["v1beta1", "options"], parameters
     def parameters(*args, products, **kwargs): return {"symbols": ",".join([str(OSI(product)) for product in products])}
 
 
-class AlpacaSpotPage(AlpacaDownloadPage, ABC):
+class AlpacaSpotPage(AlpacaPage, ABC):
     def __call__(self, *args, **kwargs):
         records = self.execute(*args, **kwargs)
         if not records: return None
@@ -54,7 +54,7 @@ class AlpacaStockSpotPage(AlpacaSpotPage, url=AlpacaStockSpotURL, instrument=Ins
 class AlpacaOptionSpotPage(AlpacaSpotPage, url=AlpacaOptionSpotURL, instrument=Instrument.OPTION): pass
 
 
-class AlpacaSpotDownloader(AlpacaDownloader):
+class AlpacaSpotDownloader(AlpacaStream):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         spot = list(self.downloader(products, **kwargs))
@@ -75,7 +75,7 @@ class AlpacaSpotDownloader(AlpacaDownloader):
             if trades is None or bool(trades.empty): yield quotes
             spot = pd.merge(quotes, trades, on=['product', 'datetime'], how='outer')
             spot = spot.sort_values(['product', 'datetime']).reset_index(drop=True)
-            results = self.results(scope=scope, size=len(spot))
+            results = self.results(scope, len(spot), self.instrument)
             self.console("Downloaded", results)
             yield quotes
 

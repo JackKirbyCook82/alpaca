@@ -15,7 +15,7 @@ from dataclasses import dataclass, asdict
 from datetime import datetime as Datetime
 
 from finance.enumerations import Frequency, Instrument
-from finance.reporting import Results
+from finance import Scope, Results
 from finance.variables import OSI
 from webscraping.weburl import WebURL
 from webscraping.webpages import WebJSONPage
@@ -24,7 +24,7 @@ from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["AlpacaDownloadPage", "AlpacaUploadPage", "AlpacaDownloadURL", "AlpacaUploadURL", "AlpacaDownloader", "AlpacaParsers", "AlpacaColumns"]
+__all__ = ["AlpacaDownloadURL", "AlpacaUploadURL", "AlpacaPage", "AlpacaStream", "AlpacaParsers", "AlpacaColumns"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
@@ -141,11 +141,7 @@ class AlpacaPage(WebJSONPage):
     def instrument(self): return self.__instrument
 
 
-class AlpacaUploadPage(AlpacaPage): pass
-class AlpacaDownloadPage(AlpacaPage): pass
-
-
-class AlpacaDownloader(Results, Logging, ABC):
+class AlpacaStream(Scope, Results, Logging, ABC):
     def __init_subclass__(cls, /, **kwargs):
         super().__init_subclass__(**kwargs)
         namespace = getattr(cls, "__namespace__", {})
@@ -165,10 +161,6 @@ class AlpacaDownloader(Results, Logging, ABC):
         self.__instrument = self.namespace["instrument"]
         self.__price = self.namespace["price"]
         self.__limit = self.namespace["limit"]
-
-    def scope(self, products, **kwargs):
-        if self.instrument is None: raise ValueError(self.instrument)
-        return super().scope(products, instrument=self.instrument)
 
     def parse(self, dataframe, /, **kwargs):
         dataframe["datetime"] = pd.to_datetime(dataframe["datetime"])
