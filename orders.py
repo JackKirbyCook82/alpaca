@@ -162,9 +162,6 @@ class AlpacaOrderUploader(AlpacaStream, page=AlpacaOrderUploadPage, instrument=I
         orders = pd.concat(list(orders), axis=0)
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
-        scope = self.scope(orders)
-        results = self.results(scope, len(orders.index), self.instrument)
-        self.console("Uploaded", results)
         return orders
 
     def filter(self, targets, /, **kwargs):
@@ -192,9 +189,6 @@ class AlpacaOrderDownloader(AlpacaStream, page=AlpacaOrderDownloadPage, instrume
         if orders is None or bool(orders.empty): return None
         orders = orders.sort_values(by=["order", "asset"], inplace=False)
         orders = orders.reset_index(drop=True, inplace=False)
-        scope = self.scope(orders)
-        results = self.results(scope, len(orders.index), self.instrument)
-        self.console("Downloaded", results)
         return orders
 
 

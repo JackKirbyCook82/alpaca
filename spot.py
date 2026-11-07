@@ -57,6 +57,7 @@ class AlpacaOptionSpotPage(AlpacaSpotPage, url=AlpacaOptionSpotURL, instrument=I
 class AlpacaSpotDownloader(AlpacaStream):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
+        if not bool(products): return None
         spot = list(self.downloader(products, **kwargs))
         if not spot: return None
         spot = pd.concat(list(spot), axis=0)
@@ -66,18 +67,13 @@ class AlpacaSpotDownloader(AlpacaStream):
     def downloader(self, products, /, **kwargs):
         products = [products[index:index + self.limit] for index in range(0, len(products), self.limit)]
         for products in products:
-            scope = self.scope(products)
             quotes = self.page(products=products, price=Price.TRADE, **kwargs)
             trades = self.page(products=products, price=Price.QUOTE, **kwargs)
             if quotes is None and trades is None: continue
             if bool(quotes.empty) and bool(trades.empty): continue
-            if quotes is None or bool(quotes.empty): yield trades
-            if trades is None or bool(trades.empty): yield quotes
             spot = pd.merge(quotes, trades, on=['product', 'datetime'], how='outer')
             spot = spot.sort_values(['product', 'datetime']).reset_index(drop=True)
-            results = self.results(scope, len(spot), self.instrument)
-            self.console("Downloaded", results)
-            yield quotes
+            yield spot
 
 
 class AlpacaStockSpotDownloader(AlpacaSpotDownloader, page=AlpacaStockSpotPage, instrument=Instrument.STOCK): pass

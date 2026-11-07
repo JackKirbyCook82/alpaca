@@ -84,9 +84,6 @@ class AlpacaPortfolioDownloader(AlpacaStream, pages={"holdings": AlpacaHoldingsP
         if holdings is None or bool(holdings.empty): return None
         holdings = holdings.sort_values(by=["asset"], inplace=False)
         holdings = holdings.reset_index(drop=True, inplace=False)
-        scope = self.scope(holdings)
-        results = self.results(scope, len(holdings.index), self.instrument)
-        self.console("Downloaded", results)
         portfolio = SimpleNamespace(holdings=holdings, account=account)
         return portfolio
 

@@ -15,12 +15,10 @@ from dataclasses import dataclass, asdict
 from datetime import datetime as Datetime
 
 from finance.enumerations import Frequency, Instrument
-from finance import Scope, Results
 from finance.variables import OSI
 from webscraping.weburl import WebURL
 from webscraping.webpages import WebJSONPage
 from support.meta import CollectionMeta
-from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -141,7 +139,7 @@ class AlpacaPage(WebJSONPage):
     def instrument(self): return self.__instrument
 
 
-class AlpacaStream(Scope, Results, Logging, ABC):
+class AlpacaStream(ABC):
     def __init_subclass__(cls, /, **kwargs):
         super().__init_subclass__(**kwargs)
         namespace = getattr(cls, "__namespace__", {})

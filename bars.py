@@ -72,6 +72,7 @@ class AlpacaOptionBarsPage(AlpacaBarsPage, url=AlpacaOptionBarsURL, data=AlpacaB
 class AlpacaBarsDownloader(AlpacaStream):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
+        if not bool(products): return None
         bars = list(self.downloader(products, **kwargs))
         if not bars: return None
         bars = pd.concat(list(bars), axis=0)
@@ -81,11 +82,8 @@ class AlpacaBarsDownloader(AlpacaStream):
     def downloader(self, products, /, **kwargs):
         products = [products[index:index + self.limit] for index in range(0, len(products), self.limit)]
         for products in products:
-            scope = self.scope(products)
             bars = self.page(products=products, **kwargs)
             if bars is None or bool(bars.empty): continue
-            results = self.results(scope, len(bars), Instrument.STOCK)
-            self.console("Downloaded", results)
             yield bars
 
 

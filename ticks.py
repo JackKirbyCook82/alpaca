@@ -71,6 +71,7 @@ class AlpacaOptionTicksPage(AlpacaTicksPage, url=AlpacaOptionTicksURL, data=Alpa
 class AlpacaTicksDownloader(AlpacaStream):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
+        if not bool(products): return None
         ticks = list(self.downloader(products, **kwargs))
         if not ticks: return None
         ticks = pd.concat(list(ticks), axis=0)
@@ -80,11 +81,8 @@ class AlpacaTicksDownloader(AlpacaStream):
     def downloader(self, products, /, **kwargs):
         products = [products[index:index + self.limit] for index in range(0, len(products), self.limit)]
         for products in products:
-            scope = self.scope(products)
             ticks = self.page(products=products, **kwargs)
             if ticks is None or bool(ticks.empty): continue
-            results = self.results(scope, len(ticks), self.instrument)
-            self.console("Downloaded", results)
             yield ticks
 
 

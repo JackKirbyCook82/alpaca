@@ -8,7 +8,7 @@ Created on Sat Sept 26 2026
 """
 
 from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream, AlpacaParsers
-from finance.enumerations import Instrument, Right
+from finance.enumerations import Right
 from finance.querys import Contract
 from webscraping.webdatas import WebJSON
 
@@ -61,12 +61,11 @@ class AlpacaContractPage(AlpacaPage, url=AlpacaContractURL, data=AlpacaContractD
 class AlpacaContractDownloader(AlpacaStream, page=AlpacaContractPage):
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
+        if not bool(products): return None
         contracts = self.downloader(products, **kwargs)
         contracts = list(contracts)
+        if not contracts: return None
         contracts.sort(key=lambda contract: (contract.ticker, contract.expire))
-        scope = self.scope(contracts)
-        results = self.results(scope, len(contracts), "contract")
-        self.console("Downloaded", results)
         return contracts
 
     def downloader(self, products, /, **kwargs):
