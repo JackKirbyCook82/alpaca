@@ -19,6 +19,7 @@ from finance.variables import OSI
 from webscraping.weburl import WebURL
 from webscraping.webpages import WebJSONPage
 from support.meta import CollectionMeta
+from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -139,7 +140,7 @@ class AlpacaPage(WebJSONPage):
     def instrument(self): return self.__instrument
 
 
-class AlpacaStream(ABC):
+class AlpacaStream(Logging, ABC):
     def __init_subclass__(cls, /, **kwargs):
         super().__init_subclass__(**kwargs)
         namespace = getattr(cls, "__namespace__", {})
