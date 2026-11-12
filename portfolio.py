@@ -11,7 +11,7 @@ import pandas as pd
 from types import SimpleNamespace
 
 from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream
-from finance.enumerations import Instrument, Position
+from finance.enumerations import Enumerations
 from finance.variables import OSI
 from webscraping.webdatas import WebJSON
 from support.custom import ReversibleDict as RDict
@@ -23,7 +23,7 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-position_mapping = RDict({Position.LONG: "buy", Position.SHORT: "sell"})
+position_mapping = RDict({Enumerations.Position.LONG: "buy", Enumerations.Position.SHORT: "sell"})
 timestamp_parser = lambda string: pd.to_datetime(string)
 position_parser = lambda string: position_mapping[string, True]
 ticker_parser = lambda string: OSI(string).ticker
@@ -77,7 +77,7 @@ class AlpacaAccountPage(AlpacaPage, url=AlpacaAccountURL, data=AlpacaAccountData
         return series
 
 
-class AlpacaPortfolioDownloader(AlpacaStream, pages={"holdings": AlpacaHoldingsPage, "account": AlpacaAccountPage}, instrument=Instrument.OPTION):
+class AlpacaPortfolioDownloader(AlpacaStream, pages={"holdings": AlpacaHoldingsPage, "account": AlpacaAccountPage}, instrument=Enumerations.Instrument.OPTION):
     def __call__(self, /, **kwargs):
         account = self.pages["account"](**kwargs)
         holdings = self.pages["holdings"](**kwargs)

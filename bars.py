@@ -11,7 +11,9 @@ import pandas as pd
 from abc import ABC, abstractmethod
 
 from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream, AlpacaParsers
-from finance.enumerations import Price, Instrument
+from finance.console import LoggingDecorator, LoggingSizing
+from finance.enumerations import Enumerations
+from finance.variables import Categories
 from finance.variables import OSI
 from webscraping.webdatas import WebJSON
 
@@ -65,11 +67,12 @@ class AlpacaBarsPage(AlpacaPage, ABC):
         else: return list(records) + self.execute(*args, pagination=pagination, **kwargs)
 
 
-class AlpacaStockBarsPage(AlpacaBarsPage, url=AlpacaStockBarsURL, data=AlpacaBarsData, instrument=Instrument.STOCK): pass
-class AlpacaOptionBarsPage(AlpacaBarsPage, url=AlpacaOptionBarsURL, data=AlpacaBarsData, instrument=Instrument.OPTION): pass
+class AlpacaStockBarsPage(AlpacaBarsPage, url=AlpacaStockBarsURL, data=AlpacaBarsData, instrument=Enumerations.Instrument.STOCK): pass
+class AlpacaOptionBarsPage(AlpacaBarsPage, url=AlpacaOptionBarsURL, data=AlpacaBarsData, instrument=Enumerations.Instrument.OPTION): pass
 
 
 class AlpacaBarsDownloader(AlpacaStream):
+    @LoggingDecorator(categories=[Categories.Ticker, Categories.Expire], sizing=LoggingSizing.OUTLET, title="Downloaded")
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         if not bool(products): return None
@@ -87,11 +90,11 @@ class AlpacaBarsDownloader(AlpacaStream):
             yield bars
 
 
-class AlpacaStockBarsDownloader(AlpacaBarsDownloader, page=AlpacaStockBarsPage, instrument=Instrument.STOCK): pass
-class AlpacaOptionBarsDownloader(AlpacaBarsDownloader, page=AlpacaOptionBarsPage, instrument=Instrument.OPTION): pass
+class AlpacaStockBarsDownloader(AlpacaBarsDownloader, page=AlpacaStockBarsPage, instrument=Enumerations.Instrument.STOCK): pass
+class AlpacaOptionBarsDownloader(AlpacaBarsDownloader, page=AlpacaOptionBarsPage, instrument=Enumerations.Instrument.OPTION): pass
 
-class AlpacaTradeStockBarsDownloader(AlpacaStockBarsDownloader, price=Price.TRADE): pass
-class AlpacaTradeOptionBarsDownloader(AlpacaOptionBarsDownloader, price=Price.TRADE): pass
+class AlpacaTradeStockBarsDownloader(AlpacaStockBarsDownloader, price=Enumerations.Price.TRADE): pass
+class AlpacaTradeOptionBarsDownloader(AlpacaOptionBarsDownloader, price=Enumerations.Price.TRADE): pass
 
 
 

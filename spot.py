@@ -11,7 +11,9 @@ import pandas as pd
 from abc import ABC
 
 from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream
-from finance.enumerations import Price, Instrument
+from finance.console import LoggingDecorator, LoggingSizing
+from finance.enumerations import Enumerations
+from finance.variables import Categories
 from finance.variables import OSI
 
 __version__ = "1.0.0"
@@ -42,7 +44,7 @@ class AlpacaSpotPage(AlpacaPage, ABC):
         return spot
 
     def execute(self, *args, price, **kwargs):
-        assert price in (Price.TRADE, Price.QUOTE)
+        assert price in (Enumerations.Price.TRADE, Enumerations.Price.QUOTE)
         key = str(price).lower() + "s"
         url = self.url(*args, price=price, **kwargs)
         json = self.load(url, *args, **kwargs)
@@ -50,11 +52,12 @@ class AlpacaSpotPage(AlpacaPage, ABC):
         return list(records)
 
 
-class AlpacaStockSpotPage(AlpacaSpotPage, url=AlpacaStockSpotURL, instrument=Instrument.STOCK): pass
-class AlpacaOptionSpotPage(AlpacaSpotPage, url=AlpacaOptionSpotURL, instrument=Instrument.OPTION): pass
+class AlpacaStockSpotPage(AlpacaSpotPage, url=AlpacaStockSpotURL, instrument=Enumerations.Instrument.STOCK): pass
+class AlpacaOptionSpotPage(AlpacaSpotPage, url=AlpacaOptionSpotURL, instrument=Enumerations.Instrument.OPTION): pass
 
 
 class AlpacaSpotDownloader(AlpacaStream):
+    @LoggingDecorator(categories=[Categories.Ticker, Categories.Expire], sizing=LoggingSizing.OUTLET, title="Downloaded")
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         if not bool(products): return None
@@ -67,8 +70,8 @@ class AlpacaSpotDownloader(AlpacaStream):
     def downloader(self, products, /, **kwargs):
         products = [products[index:index + self.limit] for index in range(0, len(products), self.limit)]
         for products in products:
-            quotes = self.page(products=products, price=Price.TRADE, **kwargs)
-            trades = self.page(products=products, price=Price.QUOTE, **kwargs)
+            quotes = self.page(products=products, price=Enumerations.Price.TRADE, **kwargs)
+            trades = self.page(products=products, price=Enumerations.Price.QUOTE, **kwargs)
             if quotes is None and trades is None: continue
             if bool(quotes.empty) and bool(trades.empty): continue
             spot = pd.merge(quotes, trades, on=['product', 'datetime'], how='outer')
@@ -76,8 +79,8 @@ class AlpacaSpotDownloader(AlpacaStream):
             yield spot
 
 
-class AlpacaStockSpotDownloader(AlpacaSpotDownloader, page=AlpacaStockSpotPage, instrument=Instrument.STOCK): pass
-class AlpacaOptionSpotDownloader(AlpacaSpotDownloader, page=AlpacaOptionSpotPage, instrument=Instrument.OPTION): pass
+class AlpacaStockSpotDownloader(AlpacaSpotDownloader, page=AlpacaStockSpotPage, instrument=Enumerations.Instrument.STOCK): pass
+class AlpacaOptionSpotDownloader(AlpacaSpotDownloader, page=AlpacaOptionSpotPage, instrument=Enumerations.Instrument.OPTION): pass
 
 
 

@@ -11,7 +11,9 @@ import pandas as pd
 from abc import ABC, abstractmethod
 
 from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream, AlpacaParsers
-from finance.enumerations import Price, Instrument
+from finance.console import LoggingDecorator, LoggingSizing
+from finance.enumerations import Enumerations
+from finance.variables import Categories
 from finance.variables import OSI
 from webscraping.webdatas import WebJSON
 
@@ -64,11 +66,12 @@ class AlpacaTicksPage(AlpacaPage, ABC):
         else: return list(records) + self.execute(*args, pagination=pagination, **kwargs)
 
 
-class AlpacaStockTicksPage(AlpacaTicksPage, url=AlpacaStockTicksURL, data=AlpacaTicksData, instrument=Instrument.STOCK): pass
-class AlpacaOptionTicksPage(AlpacaTicksPage, url=AlpacaOptionTicksURL, data=AlpacaTicksData, instrument=Instrument.OPTION): pass
+class AlpacaStockTicksPage(AlpacaTicksPage, url=AlpacaStockTicksURL, data=AlpacaTicksData, instrument=Enumerations.Instrument.STOCK): pass
+class AlpacaOptionTicksPage(AlpacaTicksPage, url=AlpacaOptionTicksURL, data=AlpacaTicksData, instrument=Enumerations.Instrument.OPTION): pass
 
 
 class AlpacaTicksDownloader(AlpacaStream):
+    @LoggingDecorator(categories=[Categories.Ticker, Categories.Expire], sizing=LoggingSizing.OUTLET, title="Downloaded")
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         if not bool(products): return None
@@ -86,11 +89,11 @@ class AlpacaTicksDownloader(AlpacaStream):
             yield ticks
 
 
-class AlpacaStockTicksDownloader(AlpacaTicksDownloader, page=AlpacaStockTicksPage, instrument=Instrument.STOCK): pass
-class AlpacaOptionTicksDownloader(AlpacaTicksDownloader, page=AlpacaOptionTicksPage, instrument=Instrument.OPTION): pass
+class AlpacaStockTicksDownloader(AlpacaTicksDownloader, page=AlpacaStockTicksPage, instrument=Enumerations.Instrument.STOCK): pass
+class AlpacaOptionTicksDownloader(AlpacaTicksDownloader, page=AlpacaOptionTicksPage, instrument=Enumerations.Instrument.OPTION): pass
 
-class AlpacaTradeStockTicksDownloader(AlpacaStockTicksDownloader, price=Price.TRADE): pass
-class AlpacaTradeOptionTicksDownloader(AlpacaOptionTicksDownloader, price=Price.TRADE): pass
+class AlpacaTradeStockTicksDownloader(AlpacaStockTicksDownloader, price=Enumerations.Price.TRADE): pass
+class AlpacaTradeOptionTicksDownloader(AlpacaOptionTicksDownloader, price=Enumerations.Price.TRADE): pass
 
 
 

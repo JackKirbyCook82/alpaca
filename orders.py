@@ -15,7 +15,7 @@ from datetime import date as Date
 from datetime import datetime as Datetime
 
 from alpaca.website import AlpacaDownloadURL, AlpacaUploadURL, AlpacaPage, AlpacaStream
-from finance.enumerations import Instrument, Right, Position, Status, Tenure, Terms, Intent, Action, Spread
+from finance.enumerations import Enumerations
 from finance.variables import OSI
 from webscraping.webpayloads import WebPayload
 from webscraping.webpages import WebJSONPage
@@ -32,9 +32,9 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-status_mapping = RDict({Status.EXECUTING: "new", Status.PARTIAL: "partially_filled"})
-tenure_mapping = RDict({Tenure.DAY: "day", Tenure.GTC: "gtc", Tenure.FOK: "fok"})
-term_mapping = RDict({Terms.MARKET: "market", Terms.LIMIT: "limit", Terms.STOP: "stop"})
+status_mapping = RDict({Enumerations.Status.EXECUTING: "new", Enumerations.Status.PARTIAL: "partially_filled"})
+tenure_mapping = RDict({Enumerations.Tenure.DAY: "day", Enumerations.Tenure.GTC: "gtc", Enumerations.Tenure.FOK: "fok"})
+term_mapping = RDict({Enumerations.Terms.MARKET: "market", Enumerations.Terms.LIMIT: "limit", Enumerations.Terms.STOP: "stop"})
 
 purpose_formatter = lambda purpose: f"{str(purpose.action).lower()}_to_{str(purpose.intent).lower()}"
 tenure_formatter = lambda tenure: tenure_mapping[tenure, False]
@@ -44,8 +44,8 @@ date_formatter = lambda date: date.strftime("%Y%m%d")
 quantity_formatter = lambda quantity: f"{quantity:.0f}"
 price_formatter = lambda price: f"{price:.2f}"
 
-position_parser = lambda string: Position(math.prod(list(map(int, [function(str(value).upper()) for function, value in zip([Action, Intent], str(string).split("_to_"))]))))
-status_parser = lambda string: status_mapping[string, True] if (string, True) in status_mapping else Status[str(string).upper()]
+position_parser = lambda string: Enumerations.Position(math.prod(list(map(int, [function(str(value).upper()) for function, value in zip([Enumerations.Action, Enumerations.Intent], str(string).split("_to_"))]))))
+status_parser = lambda string: status_mapping[string, True] if (string, True) in status_mapping else Enumerations.Status[str(string).upper()]
 date_parser = lambda string: Datetime.strptime(string, "%Y%m%d").date()
 tenure_parser = lambda string: tenure_mapping[string, True]
 term_parser = lambda string: term_mapping[string, True]
@@ -58,7 +58,7 @@ strike_parser = lambda string: OSI(string).strike
 
 order_typing = {"date": Datetime, "order": str, "asset": str, "term": int, "tenure": int, "spread": int, "ticker": str, "expire": Date, "right": int, "strike": float, "position": int, "quantity": int}
 order_formatting = {"date": date_formatter, "term": int, "tenure": int, "spread": int, "expire": date_formatter, "right": int, "position": int}
-order_parsing = {"term": Terms, "tenure": Tenure, "spread": Spread, "expire": date_parser, "right": Right, "position": Position}
+order_parsing = {"term": Enumerations.Terms, "tenure": Enumerations.Tenure, "spread": Enumerations.Spread, "expire": date_parser, "right": Enumerations.Right, "position": Enumerations.Position}
 order_columns = ["order", "asset", "date", "term", "tenure", "spread", "ticker", "expire", "right", "strike", "position", "quantity"]
 order_header = Header(order_columns, order_typing, order_formatting, order_parsing)
 
@@ -146,7 +146,7 @@ class AlpacaOrderDownloadPage(AlpacaPage, AlpacaOrderPage, url=AlpacaOrderDownlo
         return orders
 
 
-class AlpacaOrderUploader(AlpacaStream, page=AlpacaOrderUploadPage, instrument=Instrument.OPTION):
+class AlpacaOrderUploader(AlpacaStream, page=AlpacaOrderUploadPage, instrument=Enumerations.Instrument.OPTION):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.__mutex = multiprocessing.Lock()
@@ -183,7 +183,7 @@ class AlpacaOrderUploader(AlpacaStream, page=AlpacaOrderUploadPage, instrument=I
     def mutex(self): return self.__mutex
 
 
-class AlpacaOrderDownloader(AlpacaStream, page=AlpacaOrderDownloadPage, instrument=Instrument.OPTION):
+class AlpacaOrderDownloader(AlpacaStream, page=AlpacaOrderDownloadPage, instrument=Enumerations.Instrument.OPTION):
     def __call__(self, /, **kwargs):
         orders = self.page(**kwargs)
         if orders is None or bool(orders.empty): return None

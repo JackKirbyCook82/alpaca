@@ -14,12 +14,11 @@ from typing import Callable
 from dataclasses import dataclass, asdict
 from datetime import datetime as Datetime
 
-from finance.enumerations import Frequency, Instrument
+from finance.enumerations import Enumerations
 from finance.variables import OSI
 from webscraping.weburl import WebURL
 from webscraping.webpages import WebJSONPage
 from support.meta import CollectionMeta
-from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -58,13 +57,13 @@ class AlpacaColumns(metaclass=CollectionMeta):
 
 
 @dataclass(frozen=True)
-class AlpacaFrequency: by: Frequency; code: str; span: list[int]
+class AlpacaFrequency: by: Enumerations.Frequency; code: str; span: list[int]
 class AlpacaFrequencies(metaclass=CollectionMeta):
-    months = AlpacaFrequency(Frequency.MONTHLY, "M", list(value for value in range(1, 13) if not 12 % value))
-    minutes = AlpacaFrequency(Frequency.MINUTELY, "T", list(range(1, 59 + 1)))
-    hours = AlpacaFrequency(Frequency.HOURLY, "H", list(range(1, 23 + 1)))
-    weeks = AlpacaFrequency(Frequency.WEEKLY, "W", [1])
-    days = AlpacaFrequency(Frequency.DAILY, "D", [1])
+    months = AlpacaFrequency(Enumerations.Frequency.MONTHLY, "M", list(value for value in range(1, 13) if not 12 % value))
+    minutes = AlpacaFrequency(Enumerations.Frequency.MINUTELY, "T", list(range(1, 59 + 1)))
+    hours = AlpacaFrequency(Enumerations.Frequency.HOURLY, "H", list(range(1, 23 + 1)))
+    weeks = AlpacaFrequency(Enumerations.Frequency.WEEKLY, "W", [1])
+    days = AlpacaFrequency(Enumerations.Frequency.DAILY, "D", [1])
 
     def __new__(cls, frequency):
         by, span = frequency.by, frequency.span
@@ -140,7 +139,7 @@ class AlpacaPage(WebJSONPage):
     def instrument(self): return self.__instrument
 
 
-class AlpacaStream(Logging, ABC):
+class AlpacaStream(ABC):
     def __init_subclass__(cls, /, **kwargs):
         super().__init_subclass__(**kwargs)
         namespace = getattr(cls, "__namespace__", {})
@@ -165,11 +164,11 @@ class AlpacaStream(Logging, ABC):
         dataframe["datetime"] = pd.to_datetime(dataframe["datetime"])
         dataframe = dataframe.sort_values(by=["product", "datetime"], ascending=[True, False], inplace=False)
         dataframe = dataframe.reset_index(drop=True, inplace=False)
-        if self.instrument == Instrument.STOCK: product = "ticker"
-        elif self.instrument == Instrument.OPTION: product = "option"
+        if self.instrument == Enumerations.Instrument.STOCK: product = "ticker"
+        elif self.instrument == Enumerations.Instrument.OPTION: product = "option"
         else: raise ValueError(self.instrument)
         dataframe = dataframe.rename(columns={"product": product})
-        if self.instrument == Instrument.OPTION:
+        if self.instrument == Enumerations.Instrument.OPTION:
             contracts = pd.DataFrame.from_records(dataframe["osi"].map(OSI).map(asdict), index=dataframe.index)
             dataframe = pd.concat([dataframe, contracts], axis=1)
         return dataframe

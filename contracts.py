@@ -8,8 +8,10 @@ Created on Sat Sept 26 2026
 """
 
 from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream, AlpacaParsers
-from finance.enumerations import Right
-from finance.querys import Contract
+from finance.console import LoggingDecorator, LoggingSizing
+from finance.enumerations import Enumerations
+from finance.variables import Categories
+from finance.querys import Querys
 from webscraping.webdatas import WebJSON
 
 __version__ = "1.0.0"
@@ -33,10 +35,10 @@ class AlpacaContractURL(AlpacaDownloadURL, domain="https://paper-api.alpaca.mark
 
 class AlpacaContractData(WebJSON, multiple=False, optional=False):
     class Pagination(WebJSON.Text, key="pagination", locator="//next_page_token", parser=AlpacaParsers.pagination, optional=True): pass
-    class Contracts(WebJSON, key="contracts", locator="//option_contracts[]", parser=Contract, multiple=True, optional=True):
+    class Contracts(WebJSON, key="contracts", locator="//option_contracts[]", parser=Querys.Contract, multiple=True, optional=True):
         class Ticker(WebJSON.Text, key="ticker", locator="//underlying_symbol", parser=str): pass
         class Expire(WebJSON.Text, key="expire", locator="//expiration_date", parser=AlpacaParsers.expire): pass
-        class Right(WebJSON.Text, key="right", locator="//type", parser=Right): pass
+        class Right(WebJSON.Text, key="right", locator="//type", parser=Enumerations.Right): pass
         class Strike(WebJSON.Text, key="strike", locator="//strike_price", parser=AlpacaParsers.strike): pass
 
 
@@ -59,6 +61,7 @@ class AlpacaContractPage(AlpacaPage, url=AlpacaContractURL, data=AlpacaContractD
 
 
 class AlpacaContractDownloader(AlpacaStream, page=AlpacaContractPage):
+    @LoggingDecorator(categories=[Categories.Ticker, Categories.Expire], sizing=LoggingSizing.OUTLET, title="Downloaded")
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         if not bool(products): return None
