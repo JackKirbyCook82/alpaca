@@ -61,7 +61,7 @@ class AlpacaContractPage(AlpacaPage, url=AlpacaContractURL, data=AlpacaContractD
 
 
 class AlpacaContractDownloader(AlpacaStream, page=AlpacaContractPage):
-    @LoggingDecorator(Collections.Tickers, Collections.Expires, sizing=LoggingSizing.OUTLET, title="Downloaded")
+    @LoggingDecorator(Collections.Ticker, Collections.Expire, sizing=LoggingSizing.OUTLET, title="Downloaded")
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         if not bool(products): return None
