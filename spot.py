@@ -12,8 +12,8 @@ from abc import ABC
 
 from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream
 from finance.console import LoggingDecorator, LoggingSizing
+from finance.variables import Collections, Variables
 from finance.enumerations import Enumerations
-from finance.variables import Collections
 from finance.variables import OSI
 
 __version__ = "1.0.0"
@@ -57,7 +57,7 @@ class AlpacaOptionSpotPage(AlpacaSpotPage, url=AlpacaOptionSpotURL, instrument=E
 
 
 class AlpacaSpotDownloader(AlpacaStream):
-    @LoggingDecorator(Collections.Ticker, Collections.Expire, sizing=LoggingSizing.OUTLET, title="Downloaded")
+    @LoggingDecorator(Collections[Variables.Ticker], Collections[Variables.Expire], sizing=LoggingSizing.OUTLET, title="Downloaded")
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         if not bool(products): return None
