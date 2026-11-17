@@ -15,11 +15,12 @@ from dataclasses import dataclass, asdict
 from datetime import datetime as Datetime
 
 from finance.enumerations import Enumerations
-from finance.console import LoggingMixin
 from finance.variables import OSI
 from webscraping.webpages import WebJSONPage
 from webscraping.weburl import WebURL
-from support.meta import CollectionMeta
+from support.meta import CollectionMeta, NamespaceMeta
+from support.pipeline import Pipeline
+from support.mixins import Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -140,26 +141,14 @@ class AlpacaPage(WebJSONPage):
     def instrument(self): return self.__instrument
 
 
-class AlpacaStream(LoggingMixin, ABC):
-    def __init_subclass__(cls, /, **kwargs):
-        super().__init_subclass__(**kwargs)
-        namespace = getattr(cls, "__namespace__", {})
-        instrument = kwargs.get("instrument", namespace.get("instrument", None))
-        price = kwargs.get("price", namespace.get("price", None))
-        limit = kwargs.get("limit", namespace.get("limit", 100))
-        pages = kwargs.get("pages", namespace.get("pages", {}))
-        page = kwargs.get("page", namespace.get("page", None))
-        url = kwargs.get("url", namespace.get("url", None))
-        namespace = dict(instrument=instrument, price=price, limit=limit, pages=pages, page=page, url=url)
-        cls.__namespace__ = namespace
-
-    def __init__(self, *args, **kwargs):
+class AlpacaStream(Pipeline, Logging, ABC, namespace={"instrument": None, "price": None, "url": None, "page": None, "pages": {}, "limit": 100}):
+    def __init__(self, *args, instrument, price, limit, pages, page, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__pages = {key: page(*args, **kwargs) for key, page in self.namespace["pages"].items()}
-        self.__page = self.namespace["page"](*args, **kwargs) if self.namespace["page"] is not None else None
-        self.__instrument = self.namespace["instrument"]
-        self.__price = self.namespace["price"]
-        self.__limit = self.namespace["limit"]
+        self.__pages = {key: page(*args, **kwargs) for key, page in pages.items()}
+        self.__page = page(*args, **kwargs) if page is not None else None
+        self.__instrument = instrument
+        self.__price = price
+        self.__limit = limit
 
     def parse(self, dataframe, /, **kwargs):
         dataframe["datetime"] = pd.to_datetime(dataframe["datetime"])
