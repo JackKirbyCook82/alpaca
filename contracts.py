@@ -8,7 +8,7 @@ Created on Sat Sept 26 2026
 """
 
 from alpaca.website import AlpacaDownloadURL, AlpacaPage, AlpacaStream, AlpacaParsers
-from finance.console import LoggingDecorator, LoggingSizing
+from finance.console import LoggingDecorators, LoggingSizing
 from finance.variables import Collection, Variables
 from finance.enumerations import Enumerations
 from finance.querys import Querys
@@ -61,7 +61,7 @@ class AlpacaContractPage(AlpacaPage, url=AlpacaContractURL, data=AlpacaContractD
 
 
 class AlpacaContractDownloader(AlpacaStream, page=AlpacaContractPage):
-    @LoggingDecorator(Collection[Variables.Ticker], Collection[Variables.Expire], sizing=LoggingSizing.OUTLET, title="Downloaded")
+    @LoggingDecorators.Function(Collection[Variables.Ticker], Collection[Variables.Expire], sizing=LoggingSizing.OUTLET, title="Downloaded")
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
         if not bool(products): return None
