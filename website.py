@@ -18,9 +18,8 @@ from finance.enumerations import Enumerations
 from finance.variables import OSI
 from webscraping.webpages import WebJSONPage
 from webscraping.weburl import WebURL
-from support.meta import CollectionMeta, NamespaceMeta
-from support.pipeline import Pipeline
-from support.mixins import Logging
+from support.meta import CollectionMeta
+from support.mixins import LoggingMixin
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -141,7 +140,7 @@ class AlpacaPage(WebJSONPage):
     def instrument(self): return self.__instrument
 
 
-class AlpacaStream(Pipeline, Logging, ABC, namespace={"instrument": None, "price": None, "url": None, "page": None, "pages": {}, "limit": 100}):
+class AlpacaStream(LoggingMixin, ABC, namespace={"instrument": None, "price": None, "url": None, "page": None, "pages": {}, "limit": 100}):
     def __init__(self, *args, instrument, price, limit, pages, page, **kwargs):
         super().__init__(*args, **kwargs)
         self.__pages = {key: page(*args, **kwargs) for key, page in pages.items()}
@@ -163,8 +162,6 @@ class AlpacaStream(Pipeline, Logging, ABC, namespace={"instrument": None, "price
             dataframe = pd.concat([dataframe, contracts], axis=1)
         return dataframe
 
-    @property
-    def namespace(self): return type(self).__namespace__
     @property
     def instrument(self): return self.__instrument
     @property

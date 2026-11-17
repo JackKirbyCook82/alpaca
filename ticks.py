@@ -16,6 +16,7 @@ from finance.variables import Collection, Variables
 from finance.enumerations import Enumerations
 from finance.variables import OSI
 from webscraping.webdatas import WebJSON
+from support.pipeline import Pipelines
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -71,6 +72,7 @@ class AlpacaOptionTicksPage(AlpacaTicksPage, url=AlpacaOptionTicksURL, data=Alpa
 
 
 class AlpacaTicksDownloader(AlpacaStream):
+    @Pipelines.Function()
     @LoggingDecorators.Function(Collection[Variables.Ticker], Collection[Variables.Expire], sizing=LoggingSizing.OUTLET, title="Downloaded")
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]

@@ -15,6 +15,7 @@ from finance.console import LoggingDecorators, LoggingSizing
 from finance.variables import Collection, Variables
 from finance.enumerations import Enumerations
 from finance.variables import OSI
+from support.pipeline import Pipelines
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -57,6 +58,7 @@ class AlpacaOptionSpotPage(AlpacaSpotPage, url=AlpacaOptionSpotURL, instrument=E
 
 
 class AlpacaSpotDownloader(AlpacaStream):
+    @Pipelines.Function()
     @LoggingDecorators.Function(Collection[Variables.Ticker], Collection[Variables.Expire], sizing=LoggingSizing.OUTLET, title="Downloaded")
     def __call__(self, products, /, **kwargs):
         if not isinstance(products, list): products = [products]
