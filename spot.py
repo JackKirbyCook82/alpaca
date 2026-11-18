@@ -65,7 +65,7 @@ class AlpacaSpotDownloader(AlpacaStream):
         if not bool(products): return None
         spot = list(self.downloader(products, **kwargs))
         if not spot: return None
-        spot = pd.concat(list(spot), axis=0)
+        spot = pd.concat(list(spot), axis=0, ignore_index=True)
         spot = self.parse(spot, **kwargs)
         return spot
 
